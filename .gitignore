@@ -6,3 +6,9 @@ minimal_cpp_example
 
 # Eclair-specific overrides
 eclair_*
+
+# Downloaded toolchains (see tests/compile_hlsl.py)
+tools/
+
+# HLSL test compile output
+tests/hlsl/_out/

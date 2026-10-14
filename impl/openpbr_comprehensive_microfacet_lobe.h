@@ -36,6 +36,13 @@ struct OpenPBR_ComprehensiveMicrofacetReflectionTransmissionLobe
     OpenPBR_ComprehensiveReflectionTransmissionCoefficient refl_trans_coeff;
     vec3 eta_t_over_eta_i;
     vec3 path_throughput;
+
+    OPENPBR_STRUCT_CTOR_5(OpenPBR_ComprehensiveMicrofacetReflectionTransmissionLobe,
+        vec3, normal_ff,
+        OpenPBR_AnisotropicGGXSmithVNDFMicrofacetDistribution, microfacet_distr,
+        OpenPBR_ComprehensiveReflectionTransmissionCoefficient, refl_trans_coeff,
+        vec3, eta_t_over_eta_i,
+        vec3, path_throughput)
 };
 
 vec3 openpbr_channel_probabilities(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_ComprehensiveMicrofacetReflectionTransmissionLobe) lobe)

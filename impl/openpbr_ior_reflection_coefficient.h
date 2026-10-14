@@ -30,6 +30,8 @@
 struct OpenPBR_IorReflectionCoefficient
 {
     float eta_t_over_eta_i;  // the IOR used for reflection
+
+    OPENPBR_STRUCT_CTOR_1(OpenPBR_IorReflectionCoefficient, float, eta_t_over_eta_i)
 };
 
 vec3 openpbr_reflection_coefficient(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_IorReflectionCoefficient) refl_trans_coeff,

@@ -21,6 +21,8 @@ struct OpenPBR_DiffuseSpecular
 {
     vec3 diffuse;
     vec3 specular;
+
+    OPENPBR_STRUCT_CTOR_2(OpenPBR_DiffuseSpecular, vec3, diffuse, vec3, specular)
 };
 
 OPENPBR_INLINE_FUNCTION OpenPBR_DiffuseSpecular openpbr_make_diffuse_specular(const vec3 diffuse, const vec3 specular)

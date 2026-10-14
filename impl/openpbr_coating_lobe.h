@@ -61,6 +61,16 @@ struct OpenPBR_CoatingLobe_AggregateLobe
     OpenPBR_MinimalMicrofacetReflectionLobe_AnisotropicGGXSmithVNDFMicrofacetDistribution_IorReflectionCoefficient coat_reflection_lobe;
     float in_reflected;
     vec3 in_base_layer_scale;
+
+    OPENPBR_STRUCT_CTOR_8(OpenPBR_CoatingLobe_AggregateLobe,
+        OpenPBR_AggregateLobe, base_lobe,
+        vec3, normal_ff,
+        vec3, tint,
+        float, presence,
+        bool, inside,
+        OpenPBR_MinimalMicrofacetReflectionLobe_AnisotropicGGXSmithVNDFMicrofacetDistribution_IorReflectionCoefficient, coat_reflection_lobe,
+        float, in_reflected,
+        vec3, in_base_layer_scale)
 };
 
 // Define how light should be tinted as it passes through the coat in one direction.

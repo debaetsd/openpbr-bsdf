@@ -29,6 +29,8 @@ struct OpenPBR_PolarizedFloat
 {
     float s;  // S-polarization component
     float p;  // P-polarization component
+
+    OPENPBR_STRUCT_CTOR_2(OpenPBR_PolarizedFloat, float, s, float, p)
 };
 
 // Struct for polarized complex numbers
@@ -36,6 +38,8 @@ struct OpenPBR_PolarizedComplex
 {
     openpbr_complex s;  // S-polarization complex component
     openpbr_complex p;  // P-polarization complex component
+
+    OPENPBR_STRUCT_CTOR_2(OpenPBR_PolarizedComplex, openpbr_complex, s, openpbr_complex, p)
 };
 
 // Struct for polarized color quantities (per color channel)
@@ -43,6 +47,8 @@ struct OpenPBR_PolarizedColor
 {
     vec3 s;  // S-polarization components for RGB
     vec3 p;  // P-polarization components for RGB
+
+    OPENPBR_STRUCT_CTOR_2(OpenPBR_PolarizedColor, vec3, s, vec3, p)
 };
 
 // Enforce physical branch: choose cos(theta_t) such that Im(eta_t * cos(theta_t)) >= 0
@@ -349,6 +355,8 @@ struct OpenPBR_ThinFilmResults
 {
     vec3 reflectance_dielectric;  // Reflectance of the dielectric base
     vec3 reflectance_metal;       // Reflectance of the metal base
+
+    OPENPBR_STRUCT_CTOR_2(OpenPBR_ThinFilmResults, vec3, reflectance_dielectric, vec3, reflectance_metal)
 };
 
 // Main function to compute reflectance (RGB power coefficient) of combination of thin film and base surface

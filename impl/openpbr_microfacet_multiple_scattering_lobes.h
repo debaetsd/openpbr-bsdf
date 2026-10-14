@@ -38,6 +38,15 @@ struct OpenPBR_DielectricMicrofacetMultipleScatteringLobe
     vec3 scale_trans;
     float reflection_ratio_ti;
     float energy_complement_ti_idotn;
+
+    OPENPBR_STRUCT_CTOR_7(OpenPBR_DielectricMicrofacetMultipleScatteringLobe,
+        vec3, normal_ff,
+        float, alpha,
+        float, eta_t_over_eta_i,
+        vec3, scale_refl,
+        vec3, scale_trans,
+        float, reflection_ratio_ti,
+        float, energy_complement_ti_idotn)
 };
 
 float openpbr_clamped_tabulated_factors(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_DielectricMicrofacetMultipleScatteringLobe) lobe,
@@ -236,6 +245,8 @@ struct OpenPBR_MetalMicrofacetMultipleScatteringLobe
     float alpha;
     vec3 scale;
     float energy_complement_idotn;
+
+    OPENPBR_STRUCT_CTOR_4(OpenPBR_MetalMicrofacetMultipleScatteringLobe, vec3, normal_ff, float, alpha, vec3, scale, float, energy_complement_idotn)
 };
 
 float openpbr_clamped_tabulated_factors(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_MetalMicrofacetMultipleScatteringLobe) lobe,

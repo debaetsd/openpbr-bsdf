@@ -38,6 +38,8 @@ struct OpenPBR_AnisotropicGGXSmithVNDFMicrofacetDistribution
     // which is needed for auxiliary operations like creating microfacet-multiple-scattering lobes
     // and estimating lobe contributions.
     float isotropic_alpha;
+
+    OPENPBR_STRUCT_CTOR_3(OpenPBR_AnisotropicGGXSmithVNDFMicrofacetDistribution, vec2, alpha, OpenPBR_Basis, basis_ff, float, isotropic_alpha)
 };
 
 vec3 openpbr_sample_ggx_smith_vndf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_AnisotropicGGXSmithVNDFMicrofacetDistribution)

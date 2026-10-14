@@ -28,7 +28,7 @@
 //   - OPENPBR_RECIPROCAL_COAT_AND_FUZZ — 0 (default, view-side attenuation) or 1 (symmetric attenuation)
 //
 // Auto-configured; override only if the default is wrong for your target:
-//   - OPENPBR_LANGUAGE_TARGET_*        — auto-detected from compiler macros; set explicitly for Slang
+//   - OPENPBR_LANGUAGE_TARGET_*        — auto-detected from compiler macros (including DXC/HLSL); set explicitly for Slang
 //
 // Optional performance hooks — define any of these to supply a faster platform-specific
 // implementation (GPU hardware intrinsics, CPU approximations, etc.):
@@ -169,7 +169,7 @@
 // Custom saturate() Override
 // ==========================
 // This library defines saturate(float) and saturate(vec3) shims in the C++, GLSL, and CUDA
-// interop backends (MSL and Slang have language built-ins and emit no shim).
+// interop backends (HLSL, MSL, and Slang have language built-ins and emit no shim).
 //
 // OPENPBR_USE_CUSTOM_SATURATE = 0 (Default)
 //   - This library provides its own saturate() implementations.
@@ -195,6 +195,8 @@
 // and functions to the names used by OpenPBR code:
 //
 //   MSL, CUDA, Slang  — define vec2/vec3/vec4 as aliases for float2/float3/float4.
+//   HLSL              — same aliases, plus arity-dispatching construction macros so the
+//                       GLSL splat form vec3(x) works (HLSL's float3(x) does not splat).
 //   C++ (GLM)         — also imports abs(), cross(), dot(), mix(), smoothstep(), etc.
 //                       from the glm:: namespace via using-declarations.
 //   GLSL              — vec2/vec3/vec4 are language built-ins; this setting has no
@@ -211,8 +213,8 @@
 //     through argument-dependent lookup (ADL) even without the using-declarations.
 //   - If your vector types' constexpr capability differs from GLM's, you may predefine the
 //     vector-typed qualifiers OPENPBR_MAYBE_CONSTEXPR_{LOCAL,GLOBAL,FUNCTION} before including
-//     OpenPBR; the C++/CUDA/MSL/Slang backends leave them #ifndef-guarded so your definitions take
-//     effect (GLSL's vec is a built-in keyword, so this doesn't apply there).
+//     OpenPBR; the C++/CUDA/HLSL/MSL/Slang backends leave them #ifndef-guarded so your definitions
+//     take effect (GLSL's vec is a built-in keyword, so this doesn't apply there).
 //
 // Example:
 //   #define OPENPBR_USE_CUSTOM_VEC_TYPES 1
@@ -301,15 +303,14 @@
 //   #define OPENPBR_LANGUAGE_TARGET_CPP 1      // C++ with GLM
 //   #define OPENPBR_LANGUAGE_TARGET_CUDA 1     // CUDA
 //   #define OPENPBR_LANGUAGE_TARGET_GLSL 1     // GLSL (OpenGL/Vulkan)
+//   #define OPENPBR_LANGUAGE_TARGET_HLSL 1     // HLSL (DXC, Shader Model 6.x, DXIL)
 //   #define OPENPBR_LANGUAGE_TARGET_MSL 1      // Metal Shading Language
 //   #define OPENPBR_LANGUAGE_TARGET_SLANG 1    // Slang
-//
-// Note: There is no dedicated OPENPBR_LANGUAGE_TARGET_HLSL.
-// For HLSL-style pipelines, use Slang and set OPENPBR_LANGUAGE_TARGET_SLANG = 1.
 //
 // If you don't set any explicit target, this library will auto-detect based on compiler defines:
 //   - __CUDACC__ -> CUDA
 //   - __METAL_VERSION__ -> MSL
+//   - __hlsl_dx_compiler -> HLSL
 //   - __cplusplus -> C++
 //   - Otherwise -> GLSL (fallback default)
 //
@@ -331,6 +332,10 @@
 
 #ifndef OPENPBR_LANGUAGE_TARGET_GLSL
 #define OPENPBR_LANGUAGE_TARGET_GLSL 0
+#endif
+
+#ifndef OPENPBR_LANGUAGE_TARGET_HLSL
+#define OPENPBR_LANGUAGE_TARGET_HLSL 0
 #endif
 
 #ifndef OPENPBR_LANGUAGE_TARGET_MSL

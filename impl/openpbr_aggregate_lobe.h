@@ -53,6 +53,34 @@ struct OpenPBR_AggregateLobe
     OpenPBR_ThinWallDiffuseTransmissionLobe thin_wall_diffuse_trans_lobe;
 
     float lobe_weights[OpenPBR_NumBaseLobes];
+
+#if OPENPBR_LANGUAGE_TARGET_HLSL
+    // HLSL has no struct constructors; OPENPBR_MAKE_STRUCT_N dispatches here.
+    // See interop/openpbr_interop_hlsl.h.
+    //
+    // Written out rather than declared with OPENPBR_STRUCT_CTOR: that macro takes
+    // (type, name) pairs, which cannot express the array member lobe_weights[N].
+    // This is the only struct in OpenPBR that needs the long form.
+    static OpenPBR_AggregateLobe ctor(
+        const OpenPBR_ComprehensiveMicrofacetReflectionTransmissionLobe specular_lobe,
+        const OpenPBR_DielectricMicrofacetMultipleScatteringLobe dielectric_mms_lobe,
+        const OpenPBR_MetalMicrofacetMultipleScatteringLobe metal_mms_lobe,
+        const OpenPBR_EnergyConservingRoughDiffuseLobe diffuse_lobe,
+        const OpenPBR_ThinWallSpecularTransmissionLobe thin_wall_specular_trans_lobe,
+        const OpenPBR_ThinWallDiffuseTransmissionLobe thin_wall_diffuse_trans_lobe,
+        const float lobe_weights[OpenPBR_NumBaseLobes])
+    {
+        OpenPBR_AggregateLobe result;
+        result.specular_lobe = specular_lobe;
+        result.dielectric_mms_lobe = dielectric_mms_lobe;
+        result.metal_mms_lobe = metal_mms_lobe;
+        result.diffuse_lobe = diffuse_lobe;
+        result.thin_wall_specular_trans_lobe = thin_wall_specular_trans_lobe;
+        result.thin_wall_diffuse_trans_lobe = thin_wall_diffuse_trans_lobe;
+        result.lobe_weights = lobe_weights;
+        return result;
+    }
+#endif  // OPENPBR_LANGUAGE_TARGET_HLSL
 };
 
 int openpbr_select_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_AggregateLobe) lobe,

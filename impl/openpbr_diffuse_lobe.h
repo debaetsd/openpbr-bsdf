@@ -34,6 +34,14 @@ struct OpenPBR_EnergyConservingRoughDiffuseLobe
     float specular_alpha;
     float specular_eta_t_over_eta_i;
     float cached_specular_energy_compensation;
+
+    OPENPBR_STRUCT_CTOR_6(OpenPBR_EnergyConservingRoughDiffuseLobe,
+        vec3, normal_ff,
+        vec3, diffuse_albedo,
+        float, diffuse_roughness,
+        float, specular_alpha,
+        float, specular_eta_t_over_eta_i,
+        float, cached_specular_energy_compensation)
 };
 
 // -------------------------------

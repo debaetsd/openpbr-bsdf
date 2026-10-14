@@ -30,6 +30,8 @@
 struct OpenPBR_ThinWallDiffuseTransmissionLobe
 {
     OpenPBR_EnergyConservingRoughDiffuseLobe flipped_lobe;
+
+    OPENPBR_STRUCT_CTOR_1(OpenPBR_ThinWallDiffuseTransmissionLobe, OpenPBR_EnergyConservingRoughDiffuseLobe, flipped_lobe)
 };
 
 // Initialize the inner diffuse lobe with flipped normal and reflected view direction.

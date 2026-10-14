@@ -38,6 +38,8 @@ struct OpenPBR_VolumeDerivedProps
     vec3 thin_wall_subsurface_color;        // color of subsurface component if in thin-wall mode
     float thin_wall_subsurface_anisotropy;  // anisotropy of subsurface component if in thin-wall mode
     vec3 transmission_tint;                 // tint from zero-distance absorption (needs to be made view-dependent in thin-wall mode)
+
+    OPENPBR_STRUCT_CTOR_3(OpenPBR_VolumeDerivedProps, vec3, thin_wall_subsurface_color, float, thin_wall_subsurface_anisotropy, vec3, transmission_tint)
 };
 
 // The fully prepared BSDF state returned by openpbr_prepare().
@@ -59,6 +61,12 @@ struct OpenPBR_PreparedBsdf
     // Internal state (do not access directly; used by openpbr_eval(), openpbr_sample(), and openpbr_pdf()):
     OpenPBR_FuzzLobe_CoatingLobe_AggregateLobe fuzz_lobe;
     vec3 view_direction;
+
+    OPENPBR_STRUCT_CTOR_4(OpenPBR_PreparedBsdf,
+        OpenPBR_HomogeneousVolume, volume,
+        vec3, emission,
+        OpenPBR_FuzzLobe_CoatingLobe_AggregateLobe, fuzz_lobe,
+        vec3, view_direction)
 };
 
 // Returns true if the material requires distinct per-channel (RGB) wavelengths, i.e. when
@@ -952,9 +960,11 @@ OpenPBR_PreparedBsdf openpbr_prepare_impl(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_C
 // (with respect to solid angle). Unlike a sampled weight, it is not divided by a PDF.
 OpenPBR_DiffuseSpecular openpbr_eval_impl(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_PreparedBsdf) prepared, const vec3 light_direction)
 {
-    return OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableSheenAndCoat)
-               ? openpbr_calculate_lobe_value(prepared.fuzz_lobe, prepared.view_direction, light_direction)
-               : openpbr_calculate_lobe_value(prepared.fuzz_lobe.coating_lobe.base_lobe, prepared.view_direction, light_direction);
+    // if/else rather than ?: because HLSL's conditional operator does not accept struct operands.
+    if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableSheenAndCoat))
+        return openpbr_calculate_lobe_value(prepared.fuzz_lobe, prepared.view_direction, light_direction);
+    else
+        return openpbr_calculate_lobe_value(prepared.fuzz_lobe.coating_lobe.base_lobe, prepared.view_direction, light_direction);
 }
 
 // The returned weight includes the cosine term; specifically it is the BSDF value

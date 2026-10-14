@@ -40,6 +40,8 @@
 struct OpenPBR_ThinWallSpecularTransmissionLobe
 {
     OPENPBR_MINIMAL_MICROFACET_LOBE_TYPE flipped_lobe;
+
+    OPENPBR_STRUCT_CTOR_1(OpenPBR_ThinWallSpecularTransmissionLobe, OPENPBR_MINIMAL_MICROFACET_LOBE_TYPE, flipped_lobe)
 };
 
 #undef OPENPBR_MINIMAL_MICROFACET_LOBE_TYPE

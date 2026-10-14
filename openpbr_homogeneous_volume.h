@@ -37,6 +37,8 @@ struct OpenPBR_HomogeneousVolume
     vec3 extinction_coefficient;  // extinction coefficient
     vec3 albedo;                  // single-scattering albedo
     float anisotropy;             // mean cosine of the scattering angle
+
+    OPENPBR_STRUCT_CTOR_3(OpenPBR_HomogeneousVolume, vec3, extinction_coefficient, vec3, albedo, float, anisotropy)
 };
 
 // Initializes a volume from extinction, albedo, and anisotropy.

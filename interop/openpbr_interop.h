@@ -43,6 +43,9 @@
 #ifndef OPENPBR_LANGUAGE_TARGET_GLSL
 #define OPENPBR_LANGUAGE_TARGET_GLSL 0
 #endif
+#ifndef OPENPBR_LANGUAGE_TARGET_HLSL
+#define OPENPBR_LANGUAGE_TARGET_HLSL 0
+#endif
 #ifndef OPENPBR_LANGUAGE_TARGET_MSL
 #define OPENPBR_LANGUAGE_TARGET_MSL 0
 #endif
@@ -59,13 +62,14 @@
 #if (OPENPBR_LANGUAGE_TARGET_CPP != 0 && OPENPBR_LANGUAGE_TARGET_CPP != 1) ||                                                                        \
     (OPENPBR_LANGUAGE_TARGET_CUDA != 0 && OPENPBR_LANGUAGE_TARGET_CUDA != 1) ||                                                                      \
     (OPENPBR_LANGUAGE_TARGET_GLSL != 0 && OPENPBR_LANGUAGE_TARGET_GLSL != 1) ||                                                                      \
+    (OPENPBR_LANGUAGE_TARGET_HLSL != 0 && OPENPBR_LANGUAGE_TARGET_HLSL != 1) ||                                                                      \
     (OPENPBR_LANGUAGE_TARGET_MSL != 0 && OPENPBR_LANGUAGE_TARGET_MSL != 1) ||                                                                        \
     (OPENPBR_LANGUAGE_TARGET_SLANG != 0 && OPENPBR_LANGUAGE_TARGET_SLANG != 1)
 #error "OPENPBR_LANGUAGE_TARGET_* flags must each be 0 or 1."
 #endif
 
-#if (OPENPBR_LANGUAGE_TARGET_CPP + OPENPBR_LANGUAGE_TARGET_CUDA + OPENPBR_LANGUAGE_TARGET_GLSL + OPENPBR_LANGUAGE_TARGET_MSL +                       \
-     OPENPBR_LANGUAGE_TARGET_SLANG) > 1
+#if (OPENPBR_LANGUAGE_TARGET_CPP + OPENPBR_LANGUAGE_TARGET_CUDA + OPENPBR_LANGUAGE_TARGET_GLSL +                                                     \
+     OPENPBR_LANGUAGE_TARGET_HLSL + OPENPBR_LANGUAGE_TARGET_MSL + OPENPBR_LANGUAGE_TARGET_SLANG) > 1
 #error "Ambiguous OpenPBR target configuration: set at most one OPENPBR_LANGUAGE_TARGET_* flag to 1 (or leave all 0 for auto-detect)."
 #endif
 
@@ -81,6 +85,8 @@
 #include "openpbr_interop_cuda.h"
 #elif OPENPBR_LANGUAGE_TARGET_GLSL
 #include "openpbr_interop_glsl.h"
+#elif OPENPBR_LANGUAGE_TARGET_HLSL
+#include "openpbr_interop_hlsl.h"
 #elif OPENPBR_LANGUAGE_TARGET_MSL
 #include "openpbr_interop_msl.h"
 #elif OPENPBR_LANGUAGE_TARGET_SLANG
@@ -93,6 +99,8 @@
 #include "openpbr_interop_cuda.h"
 #elif defined(__METAL_VERSION__)
 #include "openpbr_interop_msl.h"
+#elif defined(__hlsl_dx_compiler)
+#include "openpbr_interop_hlsl.h"
 #elif defined(__cplusplus)
 // C++ compiler (checked last since CUDA also defines this)
 #include "openpbr_interop_cpp.h"

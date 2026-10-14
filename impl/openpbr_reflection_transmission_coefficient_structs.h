@@ -25,6 +25,8 @@ struct OpenPBR_AllCoefficients
 {
     vec3 reflection_coefficient;
     vec3 transmission_coefficient;
+
+    OPENPBR_STRUCT_CTOR_2(OpenPBR_AllCoefficients, vec3, reflection_coefficient, vec3, transmission_coefficient)
 };
 
 struct OpenPBR_AllCoefficientsAndProbabilities
@@ -33,6 +35,12 @@ struct OpenPBR_AllCoefficientsAndProbabilities
     vec3 transmission_coefficient;
     float reflection_probability;
     float transmission_probability;
+
+    OPENPBR_STRUCT_CTOR_4(OpenPBR_AllCoefficientsAndProbabilities,
+        vec3, reflection_coefficient,
+        vec3, transmission_coefficient,
+        float, reflection_probability,
+        float, transmission_probability)
 };
 
 #endif  // !OPENPBR_REFLECTION_TRANSMISSION_COEFFICIENT_STRUCTS_H

@@ -30,6 +30,8 @@
 struct OpenPBR_ConstantReflectionCoefficient
 {
     vec3 color;  // the constant color used for reflection
+
+    OPENPBR_STRUCT_CTOR_1(OpenPBR_ConstantReflectionCoefficient, vec3, color)
 };
 
 vec3 openpbr_reflection_coefficient(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_ConstantReflectionCoefficient) refl_trans_coeff,

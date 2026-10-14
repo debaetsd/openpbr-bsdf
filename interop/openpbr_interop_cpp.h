@@ -172,6 +172,26 @@ OPENPBR_INLINE_FUNCTION vec3 openpbr_swizzle_xyz(const vec4 v)
 }
 #define OPENPBR_SWIZZLE(v, suffix) openpbr_swizzle_##suffix(v)
 
+// Struct constructor declaration.
+// C++ uses braced aggregate initialization empty macros
+// clang-format off
+#define OPENPBR_STRUCT_CTOR_1(type, t1, n1)
+#define OPENPBR_STRUCT_CTOR_2(type, t1, n1, t2, n2)
+#define OPENPBR_STRUCT_CTOR_3(type, t1, n1, t2, n2, t3, n3)
+#define OPENPBR_STRUCT_CTOR_4(type, t1, n1, t2, n2, t3, n3, t4, n4)
+#define OPENPBR_STRUCT_CTOR_5(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5)
+#define OPENPBR_STRUCT_CTOR_6(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6)
+#define OPENPBR_STRUCT_CTOR_7(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7)
+#define OPENPBR_STRUCT_CTOR_8(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7, t8, n8)
+#define OPENPBR_STRUCT_CTOR_9(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7, t8, n8, t9, n9)
+#define OPENPBR_STRUCT_CTOR_10(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7, t8, n8, t9, n9, t10, n10)
+#define OPENPBR_STRUCT_CTOR_11(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7, t8, n8, t9, n9, t10, n10, t11, n11)
+#define OPENPBR_STRUCT_CTOR_12(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7, t8, n8, t9, n9, t10, n10, t11, n11, t12, n12)
+#define OPENPBR_STRUCT_CTOR_13(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7, t8, n8, t9, n9, t10, n10, t11, n11, t12, n12, t13, n13)
+#define OPENPBR_STRUCT_CTOR_14(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7, t8, n8, t9, n9, t10, n10, t11, n11, t12, n12, t13, n13, t14, n14)
+#define OPENPBR_STRUCT_CTOR_15(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7, t8, n8, t9, n9, t10, n10, t11, n11, t12, n12, t13, n13, t14, n14, t15, n15)
+// clang-format on
+
 // Struct-construction helpers for aggregate types.
 // clang-format off
 #define OPENPBR_MAKE_STRUCT_1(type, arg1) type{arg1}

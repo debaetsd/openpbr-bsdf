@@ -48,6 +48,23 @@ struct OpenPBR_ComprehensiveReflectionTransmissionCoefficient
     vec3 rgb_wavelengths_nm;
     vec3 thin_wall_constant_reflection_albedo;  // albedo of the thin-wall specular reflection component
                                                 // "constant" because it does not dependent on idoth
+
+    OPENPBR_STRUCT_CTOR_15(OpenPBR_ComprehensiveReflectionTransmissionCoefficient,
+        vec3, eta_t_over_eta_i_for_transparent_part,
+        vec3, eta_t_over_eta_i_for_opaque_part,
+        vec3, scale_for_reflection_for_transparent_part,
+        vec3, scale_for_reflection_for_opaque_part,
+        vec3, transmission,
+        vec3, f0_for_metal,
+        vec3, f82_tint_for_metal,
+        float, metal_amount,
+        float, thin_film_weight,
+        float, thin_film_thickness_nm,
+        float, thin_film_exterior_ior,
+        float, thin_film_ior,
+        vec3, thin_film_interior_ior,
+        vec3, rgb_wavelengths_nm,
+        vec3, thin_wall_constant_reflection_albedo)
 };
 
 // This function returns the degree to which the thin film exists.

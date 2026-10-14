@@ -1,6 +1,6 @@
 # Adobe's OpenPBR BSDF
 
-A self-contained, portable implementation of the [OpenPBR 1.1.1](https://academysoftwarefoundation.github.io/OpenPBR/) BSDF, extracted from Adobe's proprietary renderer, Eclair. Written in a GLSL-style language with macros that target C++, GLSL, CUDA, MSL (Metal Shading Language), or Slang, it's designed to drop into any path tracer with minimal setup.
+A self-contained, portable implementation of the [OpenPBR 1.1.1](https://academysoftwarefoundation.github.io/OpenPBR/) BSDF, extracted from Adobe's proprietary renderer, Eclair. Written in a GLSL-style language with macros that target C++, GLSL, HLSL, CUDA, MSL (Metal Shading Language), or Slang, it's designed to drop into any path tracer with minimal setup.
 
 ---
 
@@ -27,7 +27,7 @@ Note: This is shared as a reference implementation, not run as a community-drive
 ## Key Features
 
 - **Single-include API:** `#include "openpbr.h"` brings in the complete public API — all types, settings, and the full BSDF.
-- **Multi-language support:** C++, GLSL, CUDA, MSL, or Slang from the same source via a thin interop layer.
+- **Multi-language support:** C++, GLSL, HLSL, CUDA, MSL, or Slang from the same source via a thin interop layer.
 - **Self-contained:** No globals, no hidden dependencies — everything lives alongside the BSDF.
 - **Configurable:** Compile-time settings in `openpbr_settings.h` — LUT storage mode, language target, specialization constants, custom overrides, and more.
 - **Fixed-lobe architecture:** One struct per material component.
@@ -45,7 +45,7 @@ openpbr/
 ├── openpbr_data_constants.h      ← LUT dimensions and LUT ID constants
 ├── interop/                      ← Cross-language macro layer (auto-detected per backend)
 │   ├── openpbr_interop.h         ← Router: selects the correct backend header
-│   └── ...                       ← Per-backend headers (C++, GLSL, CUDA, MSL, Slang)
+│   └── ...                       ← Per-backend headers (C++, GLSL, HLSL, CUDA, MSL, Slang)
 ├── openpbr_resolved_inputs.h     ← Material parameter struct and default initialization
 ├── openpbr_constants.h           ← Material constants
 ├── openpbr_basis.h               ← Coordinate frame utilities
@@ -147,7 +147,7 @@ Source data format:
 
 Implementation details:
 - Energy tables: 32×32 or 32×32×32 normalized integer values [0, 65535] → [0.0, 1.0]
-  - Storage type is auto-selected per language by the interop layer: 16-bit (`unsigned short`) for C++/MSL/CUDA/Slang; 32-bit (`uint`) for GLSL — no user action required
+  - Storage type is auto-selected per language by the interop layer: 16-bit (`unsigned short`) for C++/MSL/CUDA/Slang; 32-bit (`uint`) for GLSL; for HLSL, 16-bit (`uint16_t`) when DXC is invoked with `-enable-16bit-types`, 32-bit otherwise — no user action required
 - LTC table: 32×32 vec3 values
 - Both modes use identical indexing and coordinate mappings for exact equivalence
 
@@ -157,18 +157,20 @@ Implementation details:
 
 1. Clone this repository.
 2. Include `openpbr.h` in your renderer (this provides the complete public API).
-3. Select a shading language backend. Three backends are auto-detected from built-in compiler macros:
-   - CUDA (`__CUDACC__`), MSL (`__METAL_VERSION__`), and C++ (`__cplusplus`) are detected automatically.
+3. Select a shading language backend. Four backends are auto-detected from built-in compiler macros:
+   - CUDA (`__CUDACC__`), MSL (`__METAL_VERSION__`), HLSL/DXC (`__hlsl_dx_compiler`), and C++ (`__cplusplus`) are detected automatically.
    - GLSL is the default fallback when none of the above macros are defined — no explicit setting needed.
-   - Slang has no standard built-in detection macro, so it **requires** `OPENPBR_LANGUAGE_TARGET_SLANG=1` to be defined before including `openpbr.h`. Without it, the GLSL backend will be selected, which will likely fail to compile under the Slang compiler. (For HLSL-style pipelines, use this Slang path.)
+   - Slang has no standard built-in detection macro, so it **requires** `OPENPBR_LANGUAGE_TARGET_SLANG=1` to be defined before including `openpbr.h`. Without it, the GLSL backend will be selected, which will likely fail to compile under the Slang compiler.
 
-   Any backend can also be forced explicitly by setting the corresponding `OPENPBR_LANGUAGE_TARGET_CPP`, `_GLSL`, `_MSL`, `_CUDA`, or `_SLANG` flag, which overrides auto-detection.
+   Any backend can also be forced explicitly by setting the corresponding `OPENPBR_LANGUAGE_TARGET_CPP`, `_GLSL`, `_HLSL`, `_MSL`, `_CUDA`, or `_SLANG` flag, which overrides auto-detection.
+
+   **HLSL users** need DXC and HLSL 2021 or newer; see [HLSL / D3D12](#hlsl--d3d12) below.
 
    **C++ users** must also pre-include GLM (`<glm/glm.hpp>`) before `openpbr.h`; the interop header will emit a clear error if it is missing. See `minimal_cpp_example.cpp` for a complete working example.
 4. Choose lookup table mode: Set `OPENPBR_USE_TEXTURE_LUTS` to 0 for self-contained array mode (default) or 1 for texture mode. In texture mode, define `OPENPBR_SAMPLE_2D_TEXTURE(lut_id, uv)` and `OPENPBR_SAMPLE_3D_TEXTURE(lut_id, uvw)` before `openpbr.h`; the headers emit clear errors if either macro is missing. The available texture IDs are documented in `openpbr_data_constants.h`.
 5. Optional — Pre-include hooks: Define any of the following before `openpbr.h` to customize behavior:
    - **Fast math:** `OPENPBR_FAST_RCP_SQRT(x)`, `OPENPBR_FAST_SQRT(x)`, `OPENPBR_FAST_NORMALIZE(v)` — supply faster platform-specific implementations (GPU hardware intrinsics, CPU approximations, etc.). Any undefined hook falls back to the standard library.
-   - **Conflict suppression:** Set `OPENPBR_USE_CUSTOM_SATURATE = 1` if your host already defines `saturate()`; set `OPENPBR_USE_CUSTOM_VEC_TYPES = 1` if it already provides `vec2`/`vec3`/`vec4` and, in C++, the GLM math function aliases. (For GLSL the vec types are built-in, so `OPENPBR_USE_CUSTOM_VEC_TYPES` has no effect on that backend.) If your custom vector types' `constexpr` capability differs from GLM's, you can predefine the `OPENPBR_MAYBE_CONSTEXPR_{LOCAL,GLOBAL,FUNCTION}` qualifiers before including OpenPBR — the C++/CUDA/MSL/Slang backends leave them `#ifndef`-guarded so your definitions take effect.
+   - **Conflict suppression:** Set `OPENPBR_USE_CUSTOM_SATURATE = 1` if your host already defines `saturate()`; set `OPENPBR_USE_CUSTOM_VEC_TYPES = 1` if it already provides `vec2`/`vec3`/`vec4` and, in C++, the GLM math function aliases. (For GLSL the vec types are built-in, so `OPENPBR_USE_CUSTOM_VEC_TYPES` has no effect on that backend.) If your custom vector types' `constexpr` capability differs from GLM's, you can predefine the `OPENPBR_MAYBE_CONSTEXPR_{LOCAL,GLOBAL,FUNCTION}` qualifiers before including OpenPBR — the C++/CUDA/HLSL/MSL/Slang backends leave them `#ifndef`-guarded so your definitions take effect.
    - **Specialization constants:** Override `OPENPBR_GET_SPECIALIZATION_CONSTANT(name)` to connect feature-toggle queries to your renderer's pipeline. OpenPBR calls this with one of the four toggle names (`EnableSheenAndCoat`, `EnableDispersion`, `EnableTranslucency`, `EnableMetallic`) and uses the returned bool to enable or skip entire lobe code paths. The default always returns `true`, enabling all features — correct for offline renderers and standalone use. See `openpbr_settings.h` for the full contract.
    - **Custom interop (advanced):** Set `OPENPBR_USE_CUSTOM_INTEROP = 1` and provide your own interop header before `openpbr.h` to replace the entire language abstraction layer. Prefer `OPENPBR_USE_CUSTOM_SATURATE` and `OPENPBR_USE_CUSTOM_VEC_TYPES` for targeted suppressions; reach for this only if you need to replace every macro OpenPBR defines — including the vector-typed `OPENPBR_MAYBE_CONSTEXPR_{LOCAL,GLOBAL,FUNCTION}` qualifiers, which in the built-in C++ backend follow GLM's `GLM_CONSTEXPR` so they degrade cleanly when GLM disables `constexpr` under SIMD.
 6. Populate `OpenPBR_ResolvedInputs` with texture-evaluated parameters and geometry data, or start with `openpbr_make_default_resolved_inputs()` and override specific properties.
@@ -211,6 +213,55 @@ openpbr_sample(prepared,
 ### Standalone C++ example
 
 A self-contained example is provided in `minimal_cpp_example.cpp`. It demonstrates the core path-tracing loop — prepare the BSDF, importance-sample a new direction, and accumulate the throughput weight — with a minimal random-number generator so no external dependencies are needed beyond GLM. Build instructions are at the top of the file.
+
+---
+
+## HLSL / D3D12
+
+`interop/openpbr_interop_hlsl.h` targets DXC and Shader Model 6.x, producing DXIL for D3D12. The backend is selected automatically from DXC's `__hlsl_dx_compiler` define, so a shader only needs:
+
+```hlsl
+#include "openpbr.h"
+```
+
+Requirements:
+
+- **DXC.** FXC (Shader Model 5.x and below) is not supported and the header rejects it with a clear error.
+- **HLSL 2021 or newer** (`-HV 2021` or `-HV 202x`). 2021 is the DXC default since April 2022. Older language modes are rejected rather than allowed to miscompile.
+- **Shader Model 6.0+.** Ray tracing (`lib_*`) needs 6.3+; `-enable-16bit-types` needs 6.2+.
+
+Three things differ from the other shader backends, all handled inside the interop header:
+
+- **Vector splats.** GLSL's `vec3(x)` broadcasts a scalar, but HLSL's `float3(x)` is an error. `vec2`/`vec3`/`vec4` are therefore both typedefs (for declarations) and arity-dispatching function-like macros (for construction). Set `OPENPBR_USE_CUSTOM_VEC_TYPES = 1` only if your host supplies *both* halves — the type names and splat-capable constructors. See `tests/hlsl/test_custom_hooks.hlsl` for a worked example.
+- **Struct construction.** HLSL has no constructor syntax for user-defined structs, and braced initializers are only valid in a declaration, so `OPENPBR_MAKE_STRUCT_N` expands to `type::ctor(...)`. Each struct declares that member through `OPENPBR_STRUCT_CTOR_N`, which every other backend defines to nothing:
+
+  ```c
+  struct OpenPBR_Basis
+  {
+      vec3 t, b, n;
+
+      OPENPBR_STRUCT_CTOR_3(OpenPBR_Basis, vec3, t, vec3, b, vec3, n)
+  };
+  ```
+
+  So adding a struct means adding one line, not an `#ifdef` block. Note that the other backends deliberately get *nothing* here: GLSL and Slang synthesize constructors, while C++/CUDA/MSL rely on braced aggregate initialization, which declaring a real constructor would break. The arity suffix is explicit and the macros are non-variadic because the GLSL preprocessor supports neither `__VA_ARGS__` nor overloading on argument count — the same constraint that shapes `OPENPBR_MAKE_STRUCT_N`. Structs with array members (only `OpenPBR_AggregateLobe`) still declare `ctor()` by hand. `tests/hlsl/test_make_struct.hlsl` exercises all 15 arities.
+- **`static_assert`.** DXC spells it `_Static_assert`, which is what `OPENPBR_STATIC_ASSERT` maps to — so compile-time assertions are real on this backend, unlike GLSL where they are a no-op.
+
+`saturate()` is an HLSL built-in, so no shim is emitted (as with MSL and Slang); NaN behavior may therefore differ slightly from the explicit ternary used by the C++ and GLSL backends.
+
+### Compilation tests
+
+`tests/compile_hlsl.py` compiles `tests/hlsl/*.hlsl` across a matrix of shader stages (compute, pixel, vertex, DXR library), shader models 6.0–6.8, and OpenPBR configurations (default, texture LUTs, 16-bit energy tables, the override hooks, optimization levels, debug info):
+
+```bash
+python tests/compile_hlsl.py
+```
+
+It needs a DXC binary and nothing else; run `--list` to see the matrix without compiling, `--quick` for one case per shader, and `--dxc <path>` (or `OPENPBR_DXC`) to pick a specific compiler.
+
+`tests/hlsl/test_spec_constants.hlsl` covers the way a D3D12 renderer actually consumes `OPENPBR_GET_SPECIALIZATION_CONSTANT`: one shader permutation per feature-toggle combination, selected with `-D`, so each toggle resolves to a literal and DXC eliminates the disabled lobes. All 2^4 combinations are built. Because a permutation shader whose toggles are silently ignored would still compile 16 times and still report 16 passes, the script also checks that enabling each toggle individually grows the DXIL relative to the all-off build — currently 202 KiB with everything off against 439 KiB with everything on. (The cbuffer-driven variant in `test_custom_hooks.hlsl` covers the other case, where the toggles are runtime uniforms and both sides of every branch are compiled.) The matrix is maintained against DXC `v1.9.2607`; other builds are used with a warning, or refused with `--require-dxc-version`.
+
+Every case currently emits two `-Wparameter-usage` warnings from `impl/openpbr_aggregate_lobe.h`, where DXC cannot see that the unreachable "invalid lobe index" branch leaves the `out` parameters unwritten. This is consistent with the documented contract — `openpbr_sample()` sets `pdf = 0` on failure and the other outputs are undefined in that case — so the warnings are benign.
 
 ---
 
@@ -366,7 +417,7 @@ We welcome issues and pull requests, for example:
 
 - Expanded unit tests for evaluation, sampling, and energy conservation — for example, a minimal white-furnace test over a range of material configurations
 - Testing of the CUDA backend, which hasn't yet been used in production code
-- Testing of the Slang backend in HLSL-style pipelines (and, if needed, adapting the Slang interop aliases or proposing a dedicated HLSL interop header)
+- Runtime (not just compile-time) validation of the HLSL backend on a D3D12 device, and numerical comparison against the C++ backend
 - A small material-preview program that renders a sphere lit by a simple analytic environment and writes out an image, to visualize a given material configuration (kept separate from the minimal demo, which stays focused on illustrating the API)
 
 Planned or potential future work:

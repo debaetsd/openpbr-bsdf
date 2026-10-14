@@ -96,6 +96,15 @@ struct OpenPBR_FuzzLobe_CoatingLobe_AggregateLobe
     OpenPBR_Basis basis;   // a basis aligned with the normal and oriented according to the view direction
     vec3 view_dir_local;   // the view direction in the z-up local space of the basis
     float view_reflected;  // overall proportion of light reflected by the sheen lobe for the given view direction
+
+    OPENPBR_STRUCT_CTOR_7(OpenPBR_FuzzLobe_CoatingLobe_AggregateLobe,
+        OpenPBR_CoatingLobe_AggregateLobe, coating_lobe,
+        float, alpha,
+        vec3, tint,
+        float, presence,
+        OpenPBR_Basis, basis,
+        vec3, view_dir_local,
+        float, view_reflected)
 };
 
 //////////////////////////////////////////////////////

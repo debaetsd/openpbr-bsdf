@@ -25,6 +25,8 @@
 struct OpenPBR_Basis
 {
     vec3 t, b, n;
+
+    OPENPBR_STRUCT_CTOR_3(OpenPBR_Basis, vec3, t, vec3, b, vec3, n)
 };
 
 OPENPBR_INLINE_FUNCTION OpenPBR_Basis openpbr_make_identity_basis()
