@@ -629,6 +629,7 @@ void openpbr_prepare_lobes(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPB
             openpbr_safe_divide(resolved_inputs.transmission_dispersion_abbe_number, resolved_inputs.transmission_dispersion_scale, 0.0f),
             0.0f);
 
+        OPENPBR_UNROLL
         for (int channel = 0; channel < OpenPBR_NumRgbChannels; ++channel)
         {
             // Adjust the IORs to account for dispersion.
@@ -700,6 +701,7 @@ void openpbr_prepare_lobes(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPB
         //       which is actually the material's interior IOR when hitting the surface from the inside.
         if (dispersion > 0.0f)  // if dispersion was enabled above, apply it here too
         {
+            OPENPBR_UNROLL
             for (int channel = 0; channel < OpenPBR_NumRgbChannels; ++channel)
             {
                 thin_film_interior_ior[channel] =
@@ -965,6 +967,18 @@ OpenPBR_DiffuseSpecular openpbr_eval_impl(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_C
         return openpbr_calculate_lobe_value(prepared.fuzz_lobe, prepared.view_direction, light_direction);
     else
         return openpbr_calculate_lobe_value(prepared.fuzz_lobe.coating_lobe.base_lobe, prepared.view_direction, light_direction);
+}
+
+// openpbr_eval_impl and openpbr_pdf_impl in one evaluation - see openpbr_eval_and_pdf.
+void openpbr_eval_and_pdf_impl(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_PreparedBsdf) prepared,
+                               const vec3 light_direction,
+                               OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_DiffuseSpecular) value,
+                               OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) pdf)
+{
+    if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableSheenAndCoat))
+        openpbr_calculate_lobe_value_and_pdf(prepared.fuzz_lobe, prepared.view_direction, light_direction, value, pdf);
+    else
+        openpbr_calculate_lobe_value_and_pdf(prepared.fuzz_lobe.coating_lobe.base_lobe, prepared.view_direction, light_direction, value, pdf);
 }
 
 // The returned weight includes the cosine term; specifically it is the BSDF value

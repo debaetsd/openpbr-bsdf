@@ -286,10 +286,14 @@ vec3 openpbr_compute_dielectric_reflectance(const OpenPBR_PolarizedFloat r12,
                                             const vec3 eta_base,  // Refractive index(es) of the dielectric base
                                             const bool enable_dispersion)
 {
-    // Compute Fresnel coefficients for incidence from the film onto the dielectric base.
+    // One rolled loop over the channels, with nothing indexed by its counter but
+    // through openpbr_component (see there): the body is large, and is the
+    // thin film's whole per-channel cost, so it should exist once.
+    vec3 reflectance_dielectric = vec3(0.0f);
+    // Fresnel coefficients for incidence from the film onto the dielectric base.
     // Note: Must keep complex r23 to preserve phase under TIR at the base interface
-    OpenPBR_PolarizedComplex r23[OpenPBR_NumRgbChannels];
-
+    OpenPBR_PolarizedComplex r23;
+    OPENPBR_DONT_UNROLL
     for (int color_channel = 0; color_channel < OpenPBR_NumRgbChannels; ++color_channel)
     {
         // Calculate Fresnel coefficients independently for each color channel when there's dispersion
@@ -298,21 +302,13 @@ vec3 openpbr_compute_dielectric_reflectance(const OpenPBR_PolarizedFloat r12,
         {
             // Unified complex Fresnel (dielectric base => eta_t is real, pass as complex(real, 0))
             openpbr_compute_fresnel_unified_polarized_reflection_amplitude(
-                cos_theta_t_film, eta_film, openpbr_complex(eta_base[color_channel], 0.0f), r23[color_channel]);
+                cos_theta_t_film, eta_film, openpbr_complex(openpbr_component(eta_base, color_channel), 0.0f), r23);
         }
-        else
-        {
-            // In this case there's no dispersion so just copy the coefficients from the first channel
-            r23[color_channel] = r23[0];
-        }
-    }
 
-    // Compute reflectance for each color channel
-    vec3 reflectance_dielectric;
-    for (int color_channel = 0; color_channel < OpenPBR_NumRgbChannels; ++color_channel)
-    {
-        reflectance_dielectric[color_channel] =
-            openpbr_compute_combined_reflectance_for_thin_film_and_base(r12, t12, r21, t21, r23[color_channel], delta_phi[color_channel]);
+        reflectance_dielectric = openpbr_with_component(
+            reflectance_dielectric,
+            color_channel,
+            openpbr_compute_combined_reflectance_for_thin_film_and_base(r12, t12, r21, t21, r23, openpbr_component(delta_phi, color_channel)));
     }
 
     return reflectance_dielectric;
@@ -329,20 +325,26 @@ vec3 openpbr_compute_metal_reflectance(const OpenPBR_PolarizedFloat r12,
                                        const vec3 metal_F0,
                                        const vec3 metal_F82_tint)
 {
-    // Compute reflectance for each color channel
-    vec3 reflectance_metal;
+    // Compute reflectance for each color channel - one rolled loop, as in
+    // openpbr_compute_dielectric_reflectance.
+    vec3 reflectance_metal = vec3(0.0f);
+    OPENPBR_DONT_UNROLL
     for (int color_channel = 0; color_channel < OpenPBR_NumRgbChannels; ++color_channel)
     {
         // Compute complex IOR n and k from metal_F0 and metal_F82_tint
-        const openpbr_complex n_and_k = openpbr_compute_gulbrandsen_n_and_k(metal_F0[color_channel], metal_F82_tint[color_channel]);
+        const openpbr_complex n_and_k = openpbr_compute_gulbrandsen_n_and_k(openpbr_component(metal_F0, color_channel),
+                                                                            openpbr_component(metal_F82_tint, color_channel));
 
         // Compute Fresnel coefficients at the film-metal interface using unified function
         OpenPBR_PolarizedComplex r23_metal;
         openpbr_compute_fresnel_unified_polarized_reflection_amplitude(cos_theta_t_film, eta_film, n_and_k, r23_metal);
 
         // Compute and store reflectance for this color channel
-        reflectance_metal[color_channel] =
-            openpbr_compute_combined_reflectance_for_thin_film_and_base(r12, t12, r21, t21, r23_metal, delta_phi[color_channel]);
+        reflectance_metal = openpbr_with_component(
+            reflectance_metal,
+            color_channel,
+            openpbr_compute_combined_reflectance_for_thin_film_and_base(
+                r12, t12, r21, t21, r23_metal, openpbr_component(delta_phi, color_channel)));
     }
 
     return reflectance_metal;

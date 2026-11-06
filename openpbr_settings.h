@@ -33,6 +33,7 @@
 // Optional performance hooks — define any of these to supply a faster platform-specific
 // implementation (GPU hardware intrinsics, CPU approximations, etc.):
 //   - OPENPBR_FAST_RCP_SQRT(x), OPENPBR_FAST_SQRT(x), OPENPBR_FAST_NORMALIZE(v)
+//   - OPENPBR_UNROLL, OPENPBR_DONT_UNROLL — loop unroll hints; per-backend defaults in the interop header
 //
 // Conflict-suppression hooks — set to 1 if your host already defines these:
 //   - OPENPBR_USE_CUSTOM_SATURATE      — suppress OpenPBR's saturate() shim

@@ -215,19 +215,20 @@ OpenPBR_DiffuseSpecular openpbr_calculate_lobe_value(OPENPBR_ADDRESS_SPACE_THREA
                                                      const vec3 view_direction,
                                                      const vec3 light_direction)
 {
+    // The base from one call site for both cases: every call site is a whole
+    // inlined copy of the base on GPUs.
+    const OpenPBR_DiffuseSpecular base_value = openpbr_calculate_lobe_value(lobe.base_lobe, view_direction, light_direction);
     if (lobe.inside)
     {
         const float odotn = dot(light_direction, lobe.normal_ff);
         const vec3 base_layer_scale = openpbr_coat_passage_color_multiplier(lobe, -odotn);  // negative to tint only transmission
 
-        return openpbr_scale_diffuse_specular(openpbr_calculate_lobe_value(lobe.base_lobe, view_direction, light_direction), base_layer_scale);
+        return openpbr_scale_diffuse_specular(base_value, base_layer_scale);
     }
     else
     {
-        return openpbr_combine_coat_and_base_evals(lobe,
-                                                   openpbr_calculate_lobe_value(lobe.coat_reflection_lobe, view_direction, light_direction),
-                                                   openpbr_calculate_lobe_value(lobe.base_lobe, view_direction, light_direction),
-                                                   light_direction);
+        return openpbr_combine_coat_and_base_evals(
+            lobe, openpbr_calculate_lobe_value(lobe.coat_reflection_lobe, view_direction, light_direction), base_value, light_direction);
     }
 }
 
@@ -235,15 +236,46 @@ float openpbr_calculate_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(
                                  const vec3 view_direction,
                                  const vec3 light_direction)
 {
+    // The base from one call site for both cases, as in openpbr_calculate_lobe_value.
+    const float base_pdf = openpbr_calculate_lobe_pdf(lobe.base_lobe, view_direction, light_direction);
     if (lobe.inside)
     {
-        return openpbr_calculate_lobe_pdf(lobe.base_lobe, view_direction, light_direction);
+        return base_pdf;
     }
     else
     {
         return openpbr_combine_coat_and_base_pdfs(openpbr_calculate_lobe_pdf(lobe.coat_reflection_lobe, view_direction, light_direction),
-                                                  openpbr_calculate_lobe_pdf(lobe.base_lobe, view_direction, light_direction),
+                                                  base_pdf,
                                                   openpbr_coat_reflection_probability(lobe, view_direction));
+    }
+}
+
+// Value and pdf toward one light direction - see openpbr_calculate_lobe_value_and_pdf
+// in openpbr_aggregate_lobe.h. Same terms as openpbr_calculate_lobe_value and _pdf.
+void openpbr_calculate_lobe_value_and_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_CoatingLobe_AggregateLobe) lobe,
+                                          const vec3 view_direction,
+                                          const vec3 light_direction,
+                                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_DiffuseSpecular) value,
+                                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) pdf)
+{
+    // The base from one call site for both cases, as in openpbr_calculate_lobe_value.
+    OpenPBR_DiffuseSpecular base_value;
+    float base_pdf;
+    openpbr_calculate_lobe_value_and_pdf(lobe.base_lobe, view_direction, light_direction, base_value, base_pdf);
+    if (lobe.inside)
+    {
+        const float odotn = dot(light_direction, lobe.normal_ff);
+        const vec3 base_layer_scale = openpbr_coat_passage_color_multiplier(lobe, -odotn);  // negative to tint only transmission
+        value = openpbr_scale_diffuse_specular(base_value, base_layer_scale);
+        pdf = base_pdf;
+    }
+    else
+    {
+        OpenPBR_DiffuseSpecular coat_value;
+        float coat_pdf;
+        openpbr_calculate_lobe_value_and_pdf(lobe.coat_reflection_lobe, view_direction, light_direction, coat_value, coat_pdf);
+        value = openpbr_combine_coat_and_base_evals(lobe, coat_value, base_value, light_direction);
+        pdf = openpbr_combine_coat_and_base_pdfs(coat_pdf, base_pdf, openpbr_coat_reflection_probability(lobe, view_direction));
     }
 }
 
@@ -259,85 +291,84 @@ bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) pdf,
                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_BsdfLobeType) sampled_type)
 {
-    if (lobe.inside)
+    // One call site for sampling the base, whether from inside (no coat to pick)
+    // or below the coat: on GPUs every call site is a whole inlined copy of the
+    // base aggregate's sampling, so the two cases share it rather than each
+    // having their own.
+    const float coat_reflection_prob = lobe.inside ? 0.0f : openpbr_coat_reflection_probability(lobe, view_direction);
+
+    float rand_x = rand.x;
+    bool success;
+    if (!lobe.inside && rand_x < coat_reflection_prob)  // coat
     {
-        const bool success = openpbr_sample_lobe(lobe.base_lobe, rand, view_direction, light_direction, weight, pdf, sampled_type);
+        const float inverse_coat_reflection_prob = 1.0f / coat_reflection_prob;
+        rand_x *= inverse_coat_reflection_prob;
+        openpbr_clamp_remapped_random_number(rand_x);
+
+        success = openpbr_sample_lobe(
+            lobe.coat_reflection_lobe, vec3(rand_x, rand.y, rand.z), view_direction, light_direction, weight, pdf, sampled_type);
         if (success)
         {
-            const float odotn = dot(light_direction, lobe.normal_ff);
-            const vec3 base_layer_scale = openpbr_coat_passage_color_multiplier(lobe, -odotn);  // negative to tint only transmission
-
-            weight = openpbr_scale_diffuse_specular(weight, base_layer_scale);
-        }
-
-        return success;
-    }
-    else
-    {
-        bool success;
-
-        const float coat_reflection_prob = openpbr_coat_reflection_probability(lobe, view_direction);
-
-        float rand_x = rand.x;
-        if (rand_x < coat_reflection_prob)  // coat
-        {
-            const float inverse_coat_reflection_prob = 1.0f / coat_reflection_prob;
-            rand_x *= inverse_coat_reflection_prob;
-            openpbr_clamp_remapped_random_number(rand_x);
-
-            success = openpbr_sample_lobe(
-                lobe.coat_reflection_lobe, vec3(rand_x, rand.y, rand.z), view_direction, light_direction, weight, pdf, sampled_type);
-            if (success)
+            if (!bool(sampled_type & OpenPBR_BsdfLobeTypeSpecular))  // non-delta
             {
-                if (!bool(sampled_type & OpenPBR_BsdfLobeTypeSpecular))  // non-delta
-                {
-                    OpenPBR_DiffuseSpecular bsdf_cos = openpbr_scale_diffuse_specular(weight, pdf);
+                OpenPBR_DiffuseSpecular bsdf_cos = openpbr_scale_diffuse_specular(weight, pdf);
 
-                    bsdf_cos = openpbr_combine_coat_and_base_evals(
-                        lobe, bsdf_cos, openpbr_calculate_lobe_value(lobe.base_lobe, view_direction, light_direction), light_direction);
-                    pdf = openpbr_combine_coat_and_base_pdfs(
-                        pdf, openpbr_calculate_lobe_pdf(lobe.base_lobe, view_direction, light_direction), coat_reflection_prob);
+                OpenPBR_DiffuseSpecular base_value;
+                float base_pdf;
+                openpbr_calculate_lobe_value_and_pdf(lobe.base_lobe, view_direction, light_direction, base_value, base_pdf);
+                bsdf_cos = openpbr_combine_coat_and_base_evals(lobe, bsdf_cos, base_value, light_direction);
+                pdf = openpbr_combine_coat_and_base_pdfs(pdf, base_pdf, coat_reflection_prob);
 
-                    weight = openpbr_scale_diffuse_specular(bsdf_cos, 1.0f / pdf);
-                }
-                else  // delta
-                {
-                    // Include presence to match the coat term in the eval path (openpbr_combine_coat_and_base_evals).
-                    weight = openpbr_scale_diffuse_specular(weight, lobe.presence * inverse_coat_reflection_prob);
-                }
+                weight = openpbr_scale_diffuse_specular(bsdf_cos, 1.0f / pdf);
+            }
+            else  // delta
+            {
+                // Include presence to match the coat term in the eval path (openpbr_combine_coat_and_base_evals).
+                weight = openpbr_scale_diffuse_specular(weight, lobe.presence * inverse_coat_reflection_prob);
             }
         }
-        else  // base
+    }
+    else  // base: below the coat, or from inside
+    {
+        const float base_prob = 1.0f - coat_reflection_prob;
+        const float inverse_base_prob = 1.0f / base_prob;
+        if (!lobe.inside)  // from inside, rand_x passes through as it is
         {
-            const float base_prob = 1.0f - coat_reflection_prob;
-            const float inverse_base_prob = 1.0f / base_prob;
             rand_x = (rand_x - coat_reflection_prob) * inverse_base_prob;
             openpbr_clamp_remapped_random_number(rand_x);
-
-            success = openpbr_sample_lobe(lobe.base_lobe, vec3(rand_x, rand.y, rand.z), view_direction, light_direction, weight, pdf, sampled_type);
-            if (success)
-            {
-                if (!bool(sampled_type & OpenPBR_BsdfLobeTypeSpecular))  // non-delta
-                {
-                    OpenPBR_DiffuseSpecular bsdf_cos = openpbr_scale_diffuse_specular(weight, pdf);
-
-                    bsdf_cos = openpbr_combine_coat_and_base_evals(
-                        lobe, openpbr_calculate_lobe_value(lobe.coat_reflection_lobe, view_direction, light_direction), bsdf_cos, light_direction);
-                    pdf = openpbr_combine_coat_and_base_pdfs(
-                        openpbr_calculate_lobe_pdf(lobe.coat_reflection_lobe, view_direction, light_direction), pdf, coat_reflection_prob);
-
-                    weight = openpbr_scale_diffuse_specular(bsdf_cos, 1.0f / pdf);
-                }
-                else  // delta
-                {
-                    const vec3 remaining_scale_factors = openpbr_base_layer_scale_complete(lobe, light_direction) * inverse_base_prob;
-                    weight = openpbr_scale_diffuse_specular(weight, remaining_scale_factors);
-                }
-            }
         }
 
-        return success;
+        success = openpbr_sample_lobe(lobe.base_lobe, vec3(rand_x, rand.y, rand.z), view_direction, light_direction, weight, pdf, sampled_type);
+        if (success)
+        {
+            if (lobe.inside)
+            {
+                const float odotn = dot(light_direction, lobe.normal_ff);
+                const vec3 base_layer_scale = openpbr_coat_passage_color_multiplier(lobe, -odotn);  // negative to tint only transmission
+
+                weight = openpbr_scale_diffuse_specular(weight, base_layer_scale);
+            }
+            else if (!bool(sampled_type & OpenPBR_BsdfLobeTypeSpecular))  // non-delta
+            {
+                OpenPBR_DiffuseSpecular bsdf_cos = openpbr_scale_diffuse_specular(weight, pdf);
+
+                OpenPBR_DiffuseSpecular coat_value;
+                float coat_pdf;
+                openpbr_calculate_lobe_value_and_pdf(lobe.coat_reflection_lobe, view_direction, light_direction, coat_value, coat_pdf);
+                bsdf_cos = openpbr_combine_coat_and_base_evals(lobe, coat_value, bsdf_cos, light_direction);
+                pdf = openpbr_combine_coat_and_base_pdfs(coat_pdf, pdf, coat_reflection_prob);
+
+                weight = openpbr_scale_diffuse_specular(bsdf_cos, 1.0f / pdf);
+            }
+            else  // delta
+            {
+                const vec3 remaining_scale_factors = openpbr_base_layer_scale_complete(lobe, light_direction) * inverse_base_prob;
+                weight = openpbr_scale_diffuse_specular(weight, remaining_scale_factors);
+            }
+        }
     }
+
+    return success;
 }
 
 float openpbr_estimate_lobe_contribution(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_CoatingLobe_AggregateLobe) lobe,

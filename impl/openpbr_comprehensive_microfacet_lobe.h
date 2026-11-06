@@ -61,6 +61,16 @@ bool openpbr_validate_half_vector_for_transmission(
            (lobe.eta_t_over_eta_i.r < 1.0f && dot(lobe.normal_ff, half_vector) < 0.0f);
 }
 
+// Whether this lobe's refraction actually differs per channel. With dispersion
+// compiled in (EnableDispersion) but a material without it, the three channels'
+// relative IORs are equal, their refraction half vectors identical, and a
+// per-channel loop would compute the same coefficients - the lobe's most
+// expensive part - three times; such a loop runs once and broadcasts instead.
+bool openpbr_is_dispersive(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_ComprehensiveMicrofacetReflectionTransmissionLobe) lobe)
+{
+    return lobe.eta_t_over_eta_i.g != lobe.eta_t_over_eta_i.r || lobe.eta_t_over_eta_i.b != lobe.eta_t_over_eta_i.r;
+}
+
 void openpbr_initialize_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_INOUT(OpenPBR_ComprehensiveMicrofacetReflectionTransmissionLobe) lobe,
                              const vec3 normal_ff,
                              const OpenPBR_AnisotropicGGXSmithVNDFMicrofacetDistribution microfacet_distr,
@@ -110,30 +120,32 @@ openpbr_calculate_lobe_value(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(Open
     {
         if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableDispersion))
         {
-            vec3 D_other_terms_F;
-            for (int channel = 0; channel < OpenPBR_NumRgbChannels; ++channel)
+            // Rolled, and nothing indexed by the counter but through openpbr_component:
+            // the body holds the whole transmission coefficient (thin film included).
+            // Once, for all channels, when they refract alike (openpbr_is_dispersive).
+            vec3 D_other_terms_F = vec3(0.0f);  // 0 for a channel with invalid transmission
+            const bool dispersive = openpbr_is_dispersive(lobe);
+            OPENPBR_DONT_UNROLL
+            for (int channel = 0; channel < (dispersive ? OpenPBR_NumRgbChannels : 1); ++channel)
             {
-                const vec3 half_vector = -openpbr_fast_normalize(view_direction + light_direction * lobe.eta_t_over_eta_i[channel]);
+                const float eta = openpbr_component(lobe.eta_t_over_eta_i, channel);
+                const vec3 half_vector = -openpbr_fast_normalize(view_direction + light_direction * eta);
                 if (!openpbr_validate_half_vector_for_transmission(lobe, half_vector))
-                {
-                    D_other_terms_F[channel] = 0.0f;  // invalid transmission
-                    continue;
-                }
+                    continue;  // invalid transmission
 
                 const float idoth = dot(view_direction, half_vector);
                 const float odoth = dot(light_direction, half_vector);
                 if (idoth * odoth >= 0.0f)
-                {
-                    D_other_terms_F[channel] = 0.0f;  // invalid transmission
-                    continue;
-                }
+                    continue;  // invalid transmission
 
                 const float D = openpbr_eval_ggx(lobe.microfacet_distr, half_vector, lobe.normal_ff);
-                const float other_terms = openpbr_square(lobe.eta_t_over_eta_i[channel]) * abs(idoth) * abs(odoth) /
-                                          (openpbr_square(idoth + lobe.eta_t_over_eta_i[channel] * odoth) * idotn);
-                const float F = openpbr_transmission_coefficient(lobe.refl_trans_coeff, abs(idoth))[channel];
+                const float other_terms =
+                    openpbr_square(eta) * abs(idoth) * abs(odoth) / (openpbr_square(idoth + eta * odoth) * idotn);
+                const vec3 F = openpbr_transmission_coefficient(lobe.refl_trans_coeff, abs(idoth));
 
-                D_other_terms_F[channel] = D * other_terms * F;
+                // Per component the same product either way, so the broadcast is exact.
+                D_other_terms_F = dispersive ? openpbr_with_component(D_other_terms_F, channel, D * other_terms * openpbr_component(F, channel))
+                                             : D * other_terms * F;
             }
 
             const float G = openpbr_eval_smith_g2(lobe.microfacet_distr, view_direction, light_direction, idotn, odotn);
@@ -203,30 +215,30 @@ float openpbr_calculate_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(
     {
         if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableDispersion))
         {
-            vec3 F_prob_D_other_terms;
-            for (int channel = 0; channel < OpenPBR_NumRgbChannels; ++channel)
+            // As in openpbr_calculate_lobe_value: rolled, components through openpbr_component,
+            // and once for all channels when they refract alike.
+            vec3 F_prob_D_other_terms = vec3(0.0f);  // 0 for a channel with invalid transmission
+            const bool dispersive = openpbr_is_dispersive(lobe);
+            OPENPBR_DONT_UNROLL
+            for (int channel = 0; channel < (dispersive ? OpenPBR_NumRgbChannels : 1); ++channel)
             {
-                const vec3 half_vector = -openpbr_fast_normalize(view_direction + light_direction * lobe.eta_t_over_eta_i[channel]);
+                const float eta = openpbr_component(lobe.eta_t_over_eta_i, channel);
+                const vec3 half_vector = -openpbr_fast_normalize(view_direction + light_direction * eta);
                 if (!openpbr_validate_half_vector_for_transmission(lobe, half_vector))
-                {
-                    F_prob_D_other_terms[channel] = 0.0f;  // invalid transmission
-                    continue;
-                }
+                    continue;  // invalid transmission
 
                 const float idoth = dot(view_direction, half_vector);
                 const float odoth = dot(light_direction, half_vector);
                 if (idoth * odoth >= 0.0f)
-                {
-                    F_prob_D_other_terms[channel] = 0.0f;  // invalid transmission
-                    continue;
-                }
+                    continue;  // invalid transmission
 
                 const float D = openpbr_eval_ggx(lobe.microfacet_distr, half_vector, lobe.normal_ff);
-                const float other_terms = openpbr_square(lobe.eta_t_over_eta_i[channel]) * abs(idoth) * abs(odoth) /
-                                          (openpbr_square(idoth + lobe.eta_t_over_eta_i[channel] * odoth) * idotn);
+                const float other_terms =
+                    openpbr_square(eta) * abs(idoth) * abs(odoth) / (openpbr_square(idoth + eta * odoth) * idotn);
                 const float F_prob = openpbr_transmission_probability(lobe.refl_trans_coeff, lobe.path_throughput, abs(idoth));
 
-                F_prob_D_other_terms[channel] = F_prob * D * other_terms;
+                F_prob_D_other_terms = dispersive ? openpbr_with_component(F_prob_D_other_terms, channel, F_prob * D * other_terms)
+                                                  : vec3(F_prob * D * other_terms);
             }
 
             const float G_masking = openpbr_eval_smith_g1(lobe.microfacet_distr, view_direction, idotn);
@@ -258,6 +270,129 @@ float openpbr_calculate_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(
     }
     else  // neither reflection nor transmission
         return 0.0f;
+}
+
+// Value and pdf toward one light direction in one pass - see
+// openpbr_calculate_lobe_value_and_pdf in openpbr_aggregate_lobe.h. Results are
+// those of openpbr_calculate_lobe_value and _pdf.
+//
+// The two share the half vector(s), D, and above all the Fresnel coefficients,
+// thin film included: in reflection the value's reflection coefficient and the
+// pdf's reflection probability come from one openpbr_all_coefficients
+// evaluation (openpbr_reflection_coefficient is exactly its reflection half);
+// in transmission the value's coefficient and the pdf's probability come from
+// one openpbr_all_coefficients_with_value_transmission evaluation.
+//
+// Reflection and both kinds of transmission also share one loop: an
+// evaluation point per iteration - the one reflection half vector, or one
+// refraction half vector per channel with dispersion (else one) - so the
+// coefficients, the most expensive part of the lobe, exist once in the code
+// rather than once per case.
+void openpbr_calculate_lobe_value_and_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_ComprehensiveMicrofacetReflectionTransmissionLobe) lobe,
+                                          const vec3 view_direction,
+                                          const vec3 light_direction,
+                                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_DiffuseSpecular) value,
+                                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) pdf)
+{
+    const float idotn = dot(lobe.normal_ff, view_direction);
+    const float odotn = dot(lobe.normal_ff, light_direction);
+
+    const bool reflection = idotn * odotn > 0.0f;
+    const bool transmission = OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency) && idotn * odotn < 0.0f;
+    if (!reflection && !transmission)  // neither reflection nor transmission
+    {
+        value = openpbr_make_zero_diffuse_specular();
+        pdf = 0.0f;
+        return;
+    }
+    const bool per_channel = transmission && OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableDispersion);
+    // Per channel, but all channels refracting alike: one iteration, broadcast.
+    const bool dispersive = per_channel && openpbr_is_dispersive(lobe);
+
+    // Reflection and transmission without dispersion fill the scalar/vec3 forms
+    // of openpbr_calculate_lobe_value/_pdf directly; per-channel transmission
+    // builds these up a channel at a time (0 for a channel with invalid
+    // transmission).
+    vec3 D_other_terms_F = vec3(0.0f);
+    vec3 F_prob_D_other_terms_per_channel = vec3(0.0f);
+    float F_prob_D_other_terms = 0.0f;
+    bool valid = false;           // reflection / single transmission: the evaluation point was usable
+    bool reflection_pdf_valid = true;  // reflection only: the pdf's half-vector rounding guard
+
+    OPENPBR_DONT_UNROLL
+    for (int channel = 0; channel < (dispersive ? OpenPBR_NumRgbChannels : 1); ++channel)
+    {
+        const float eta = per_channel ? openpbr_component(lobe.eta_t_over_eta_i, channel) : lobe.eta_t_over_eta_i.r;
+        const vec3 half_vector = reflection ? openpbr_fast_normalize(view_direction + light_direction)
+                                            : -openpbr_fast_normalize(view_direction + light_direction * eta);
+        if (transmission && !openpbr_validate_half_vector_for_transmission(lobe, half_vector))
+            continue;  // invalid transmission
+
+        const float idoth = dot(view_direction, half_vector);
+        const float odoth = dot(light_direction, half_vector);
+        if (transmission && idoth * odoth >= 0.0f)
+            continue;  // invalid transmission
+
+        const float D = openpbr_eval_ggx(lobe.microfacet_distr, half_vector, lobe.normal_ff);
+        vec3 transmission_F;
+        const OpenPBR_AllCoefficients coefficients =
+            openpbr_all_coefficients_with_value_transmission(lobe.refl_trans_coeff, abs(idoth), transmission_F);
+
+        if (reflection)
+        {
+            // As openpbr_calculate_lobe_value.
+            const float other_terms = 1.0f / (4.0f * idotn);
+            D_other_terms_F = D * other_terms * coefficients.reflection_coefficient;
+            // As openpbr_calculate_lobe_pdf, including its rounding guard.
+            reflection_pdf_valid = !(idoth * odoth < 0.0f);
+            if (reflection_pdf_valid)
+            {
+                const float pdf_other_terms = idoth / (4.0f * odoth * idotn);
+                const float F_prob = openpbr_reflection_probability_from_coefficients(coefficients, lobe.path_throughput);
+                F_prob_D_other_terms = F_prob * D * pdf_other_terms;
+            }
+        }
+        else
+        {
+            const float other_terms = openpbr_square(eta) * abs(idoth) * abs(odoth) / (openpbr_square(idoth + eta * odoth) * idotn);
+            const float F_prob = openpbr_transmission_probability_from_coefficients(coefficients, lobe.path_throughput);
+            if (dispersive)
+            {
+                D_other_terms_F = openpbr_with_component(D_other_terms_F, channel, D * other_terms * openpbr_component(transmission_F, channel));
+                F_prob_D_other_terms_per_channel = openpbr_with_component(F_prob_D_other_terms_per_channel, channel, F_prob * D * other_terms);
+            }
+            else if (per_channel)  // every channel the same: exactly what the per-channel products would be
+            {
+                D_other_terms_F = D * other_terms * transmission_F;
+                F_prob_D_other_terms_per_channel = vec3(F_prob * D * other_terms);
+            }
+            else
+            {
+                D_other_terms_F = D * other_terms * transmission_F;
+                F_prob_D_other_terms = F_prob * D * other_terms;
+            }
+        }
+        valid = true;
+    }
+
+    if (!per_channel && !valid)  // invalid transmission
+    {
+        value = openpbr_make_zero_diffuse_specular();
+        pdf = 0.0f;
+        return;
+    }
+
+    const float G = openpbr_eval_smith_g2(lobe.microfacet_distr, view_direction, light_direction, idotn, odotn);
+    value = openpbr_make_diffuse_specular_from_specular(G * D_other_terms_F);
+
+    if (reflection && !reflection_pdf_valid)
+    {
+        pdf = 0.0f;
+        return;
+    }
+    const float G_masking = openpbr_eval_smith_g1(lobe.microfacet_distr, view_direction, idotn);
+    pdf = per_channel ? G_masking * dot(F_prob_D_other_terms_per_channel, openpbr_channel_probabilities(lobe))
+                      : G_masking * F_prob_D_other_terms;
 }
 
 bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_ComprehensiveMicrofacetReflectionTransmissionLobe) lobe,
@@ -347,7 +482,7 @@ bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
                 // TODO: Address numerical vulnerabilities.
                 selected_color_channel = 2;
 
-            if (!openpbr_refract(view_direction, half_vector, idoth, lobe.eta_t_over_eta_i[selected_color_channel], light_direction))
+            if (!openpbr_refract(view_direction, half_vector, idoth, openpbr_component(lobe.eta_t_over_eta_i, selected_color_channel), light_direction))
             {
                 openpbr_clear_lobe_sampling_output(light_direction, weight, pdf, sampled_type);
                 return false;
@@ -362,13 +497,13 @@ bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
             }
 
             // TODO: Only perform the necessary calculations.
-            pdf = openpbr_calculate_lobe_pdf(lobe, view_direction, light_direction);
+            OpenPBR_DiffuseSpecular bsdf_cos;
+            openpbr_calculate_lobe_value_and_pdf(lobe, view_direction, light_direction, bsdf_cos, pdf);
             if (pdf == 0.0f)
             {
                 openpbr_clear_lobe_sampling_output(light_direction, weight, pdf, sampled_type);
                 return false;
             }
-            const OpenPBR_DiffuseSpecular bsdf_cos = openpbr_calculate_lobe_value(lobe, view_direction, light_direction);
             weight = openpbr_scale_diffuse_specular(bsdf_cos, 1.0f / pdf);
 
             // It's very important to return the correct type to ensure correct treatment by outside systems.

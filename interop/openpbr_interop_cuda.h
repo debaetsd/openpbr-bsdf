@@ -71,6 +71,19 @@
 // CUDA GPU-callable helpers use __device__ inline.
 #define OPENPBR_INLINE_FUNCTION __device__ inline
 
+// Loop unroll hint, placed before a loop with a small constant trip count (the
+// per-channel and per-lobe loops). nvcc's #pragma unroll, as an operator so it can come from
+// a macro.
+// Predefine OPENPBR_UNROLL to override.
+#ifndef OPENPBR_DONT_UNROLL
+// The opposite hint, for a per-channel loop whose body is large: unrolled it
+// would be three copies of that body. nvcc's "#pragma unroll 1".
+#define OPENPBR_DONT_UNROLL _Pragma("unroll 1")
+#endif
+#ifndef OPENPBR_UNROLL
+#define OPENPBR_UNROLL _Pragma("unroll")
+#endif
+
 // Math type aliases to match GLSL naming conventions.
 // CUDA uses float2/float3/float4, but OpenPBR code uses vec2/vec3/vec4.
 // Set OPENPBR_USE_CUSTOM_VEC_TYPES = 1 to suppress these if your host already defines them.

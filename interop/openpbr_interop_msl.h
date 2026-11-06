@@ -64,6 +64,19 @@
 // MSL supports inline functions.
 #define OPENPBR_INLINE_FUNCTION inline
 
+// Loop unroll hint, placed before a loop with a small constant trip count (the
+// per-channel and per-lobe loops). Empty: MSL documents no unroll attribute; the Metal
+// compiler unrolls constant-trip-count loops itself.
+// Predefine OPENPBR_UNROLL to override.
+#ifndef OPENPBR_DONT_UNROLL
+// The opposite hint, for a per-channel loop whose body is large: unrolled it
+// would be three copies of that body. Empty, like OPENPBR_UNROLL.
+#define OPENPBR_DONT_UNROLL
+#endif
+#ifndef OPENPBR_UNROLL
+#define OPENPBR_UNROLL
+#endif
+
 // Math type aliases to match GLSL naming conventions.
 // MSL uses float2/float3/float4, but OpenPBR code uses vec2/vec3/vec4.
 // Set OPENPBR_USE_CUSTOM_VEC_TYPES = 1 to suppress these if your host already defines them.

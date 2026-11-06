@@ -443,17 +443,23 @@ OpenPBR_BsdfLobeType openpbr_get_lobe_type(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_
     return OpenPBR_BsdfLobeTypeGlossy | OpenPBR_BsdfLobeTypeReflection | openpbr_get_lobe_type(lobe.coating_lobe);
 }
 
-OpenPBR_DiffuseSpecular openpbr_calculate_lobe_value(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_FuzzLobe_CoatingLobe_AggregateLobe) lobe,
-                                                     const vec3 view_direction,
+// The fuzz layer's value given the value of everything below it, base_value.
+OpenPBR_DiffuseSpecular openpbr_fuzz_value_over_base(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_FuzzLobe_CoatingLobe_AggregateLobe) lobe,
+                                                     const OpenPBR_DiffuseSpecular base_value,
                                                      const vec3 light_direction)
 {
-    const OpenPBR_DiffuseSpecular base_value = openpbr_calculate_lobe_value(lobe.coating_lobe, view_direction, light_direction);
-
     const vec3 light_dir_local = openpbr_world_to_local(lobe.basis, light_direction);
     const vec3 sheen_value = openpbr_disney_sheen_f(lobe, lobe.view_dir_local, light_dir_local);
 
     return openpbr_add_diffuse_specular(openpbr_scale_diffuse_specular(base_value, openpbr_base_layer_scale_complete(lobe, light_dir_local)),
                                         openpbr_make_diffuse_specular_from_specular(sheen_value));
+}
+
+OpenPBR_DiffuseSpecular openpbr_calculate_lobe_value(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_FuzzLobe_CoatingLobe_AggregateLobe) lobe,
+                                                     const vec3 view_direction,
+                                                     const vec3 light_direction)
+{
+    return openpbr_fuzz_value_over_base(lobe, openpbr_calculate_lobe_value(lobe.coating_lobe, view_direction, light_direction), light_direction);
 }
 
 float openpbr_calculate_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_FuzzLobe_CoatingLobe_AggregateLobe) lobe,
@@ -468,6 +474,25 @@ float openpbr_calculate_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(
     const float sheen_prob = openpbr_sheen_probability(lobe, view_direction);
 
     return mix(base_pdf, sheen_pdf, sheen_prob);
+}
+
+// Value and pdf toward one light direction - see openpbr_calculate_lobe_value_and_pdf
+// in openpbr_aggregate_lobe.h. Same terms as openpbr_calculate_lobe_value and _pdf.
+void openpbr_calculate_lobe_value_and_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_FuzzLobe_CoatingLobe_AggregateLobe) lobe,
+                                          const vec3 view_direction,
+                                          const vec3 light_direction,
+                                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_DiffuseSpecular) value,
+                                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) pdf)
+{
+    OpenPBR_DiffuseSpecular base_value;
+    float base_pdf;
+    openpbr_calculate_lobe_value_and_pdf(lobe.coating_lobe, view_direction, light_direction, base_value, base_pdf);
+    value = openpbr_fuzz_value_over_base(lobe, base_value, light_direction);
+
+    const vec3 light_dir_local = openpbr_world_to_local(lobe.basis, light_direction);
+    const float sheen_pdf = openpbr_disney_sheen_pdf(lobe, lobe.view_dir_local, light_dir_local);
+    const float sheen_prob = openpbr_sheen_probability(lobe, view_direction);
+    pdf = mix(base_pdf, sheen_pdf, sheen_prob);
 }
 
 // Given a view direction, sample a light direction,
@@ -505,11 +530,15 @@ bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
         // Unit-length by construction, but normalize to control for rounding error in the basis rotation.
         light_direction = openpbr_fast_normalize(openpbr_local_to_world(lobe.basis, light_dir_local));
 
-        pdf = openpbr_disney_sheen_pdf(lobe, lobe.view_dir_local, light_dir_local) * sheen_prob;
-        pdf += openpbr_calculate_lobe_pdf(lobe.coating_lobe, view_direction, light_direction) *
-               base_prob;  // The returned pdf takes both lobes into account.
+        // The layers below, valued and pdf'd in one combined evaluation.
+        OpenPBR_DiffuseSpecular base_value;
+        float base_pdf;
+        openpbr_calculate_lobe_value_and_pdf(lobe.coating_lobe, view_direction, light_direction, base_value, base_pdf);
 
-        weight = openpbr_scale_diffuse_specular(openpbr_calculate_lobe_value(lobe, view_direction, light_direction),
+        pdf = openpbr_disney_sheen_pdf(lobe, lobe.view_dir_local, light_dir_local) * sheen_prob;
+        pdf += base_pdf * base_prob;  // The returned pdf takes both lobes into account.
+
+        weight = openpbr_scale_diffuse_specular(openpbr_fuzz_value_over_base(lobe, base_value, light_direction),
                                                 1.0f / pdf);  // The returned weight takes both lobes into account.
 
         sampled_type = OpenPBR_BsdfLobeTypeGlossy | OpenPBR_BsdfLobeTypeReflection;

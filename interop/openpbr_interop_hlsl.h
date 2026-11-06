@@ -97,6 +97,20 @@
 // HLSL does not require an explicit inline keyword.
 #define OPENPBR_INLINE_FUNCTION
 
+// Loop unroll hint, placed before a loop with a small constant trip count (the
+// per-channel and per-lobe loops). DXC does not unroll a loop with an early `continue`
+// on its own, and an array or vector indexed by a loop counter it leaves rolled
+// stays a dynamically indexed alloca - local memory on most GPUs.
+// Predefine OPENPBR_UNROLL to override.
+#ifndef OPENPBR_DONT_UNROLL
+// The opposite hint, for a per-channel loop whose body is large: unrolled it
+// would be three copies of that body. DXC's [loop].
+#define OPENPBR_DONT_UNROLL [loop]
+#endif
+#ifndef OPENPBR_UNROLL
+#define OPENPBR_UNROLL [unroll]
+#endif
+
 // ---------------------------------------------------------------------------
 // Backend-active flag
 // ---------------------------------------------------------------------------

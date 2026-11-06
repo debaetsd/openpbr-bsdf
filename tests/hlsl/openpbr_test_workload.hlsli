@@ -2,7 +2,7 @@
 //
 // Every test shader includes this after configuring its OpenPBR settings and
 // including openpbr.h. It touches the whole public API - prepare / eval / sample
-// / pdf - plus the prepared volume and emission outputs, so that DXC has to
+// / pdf / eval_and_pdf - plus the prepared volume and emission outputs, so that DXC has to
 // instantiate and codegen essentially all of the implementation. The result is
 // folded into a single float4 that the caller writes out, which keeps DXC from
 // dead-code-eliminating any of it.
@@ -85,9 +85,13 @@ float4 openpbr_test_workload(const float seed)
     const OpenPBR_PreparedBsdf prepared =
         openpbr_prepare(inputs, vec3(1.0f), rgb_wavelengths_nm, 1.0f, view_direction);
 
-    // eval + pdf
+    // eval + pdf, separately and combined (openpbr_eval_and_pdf) - toward
+    // different directions, so DXC cannot fold one into the other.
     const OpenPBR_DiffuseSpecular evaluated = openpbr_eval(prepared, light_direction);
     const float eval_pdf = openpbr_pdf(prepared, light_direction);
+    OpenPBR_DiffuseSpecular combined_value;
+    float combined_pdf;
+    openpbr_eval_and_pdf(prepared, normalize(vec3(0.1f, -0.3f, -0.9f)), combined_value, combined_pdf);
 
     // sample
     vec3 sampled_direction;
@@ -102,13 +106,13 @@ float4 openpbr_test_workload(const float seed)
     const vec3 volume_extinction = prepared.volume.extinction_coefficient;
     const vec3 volume_scattering_albedo = prepared.volume.albedo;
 
-    vec3 rgb = evaluated.diffuse + evaluated.specular;
+    vec3 rgb = evaluated.diffuse + evaluated.specular + combined_value.diffuse + combined_value.specular;
     rgb += sampled_weight.diffuse + sampled_weight.specular;
     rgb += sampled_direction;
     rgb += emission;
     rgb += volume_extinction + volume_scattering_albedo;
 
-    const float alpha = eval_pdf + sampled_pdf + float(sampled_type) + float(prepared.volume.anisotropy);
+    const float alpha = eval_pdf + combined_pdf + sampled_pdf + float(sampled_type) + float(prepared.volume.anisotropy);
 
     return float4(rgb, alpha);
 }

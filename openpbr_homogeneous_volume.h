@@ -98,6 +98,7 @@ openpbr_make_volume_from_absorption_and_scattering_coefficients_and_anisotropy(v
     }
     else
     {
+        OPENPBR_UNROLL
         for (int color_channel = 0; color_channel < 3; ++color_channel)
         {
             volume.albedo[color_channel] = volume.extinction_coefficient[color_channel] > 0.0f
@@ -250,6 +251,7 @@ OPENPBR_INLINE_FUNCTION void openpbr_sample_event_distance(OPENPBR_ADDRESS_SPACE
     float cdf = 0.0f;
     int sampled_color_channel = -1;
     float rand_distance = 0.0f;
+    OPENPBR_UNROLL
     for (int i = 0; i < 3; ++i)
     {
         const float probability = color_channel_probability[i];
@@ -274,7 +276,7 @@ OPENPBR_INLINE_FUNCTION void openpbr_sample_event_distance(OPENPBR_ADDRESS_SPACE
 
     // Make sure the extinction of the sampled color channel is greater than zero;
     // otherwise, the sampled distance is infinity and the distance argument is left as is.
-    const float extinction_of_sampled_color_channel = volume.extinction_coefficient[sampled_color_channel];
+    const float extinction_of_sampled_color_channel = openpbr_component(volume.extinction_coefficient, sampled_color_channel);  // not [i]: see openpbr_component
     if (extinction_of_sampled_color_channel > 0.0f)
     {
         // Perfectly sample an event distance for the selected color channel.

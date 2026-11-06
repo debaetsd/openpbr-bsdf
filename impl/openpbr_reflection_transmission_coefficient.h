@@ -195,12 +195,23 @@ vec3 openpbr_transmission_coefficient(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST
     return trans_coeff;
 }
 
-// The default implementations of the reflection and transmission probabilities use both coefficients.
-// Specialized implementations could calculate both based on the same shared factors (such as fresnel and 1-fresnel).
-OpenPBR_AllCoefficients
-openpbr_all_coefficients(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_ComprehensiveReflectionTransmissionCoefficient) refl_trans_coeff,
-                         const float idoth)
+// openpbr_all_coefficients, and in value_transmission_coefficient the transmission coefficient
+// exactly as openpbr_transmission_coefficient computes it - both from one thin-film
+// evaluation, for a caller that needs the value's coefficient and the probabilities
+// (a combined value and pdf).
+//
+// The two transmission coefficients differ in one case only: openpbr_transmission_coefficient
+// asks the thin film for the dielectric part only when the transparent part reflects
+// (scale_for_reflection_for_transparent_part > 0), and otherwise takes its reflectance as 0,
+// while the probabilities' coefficients take it whenever any dielectric part reflects. The
+// film's dielectric reflectance does not depend on which parts were asked for, so one
+// evaluation serves both: value_transmission_coefficient uses it under the narrower condition.
+OpenPBR_AllCoefficients openpbr_all_coefficients_with_value_transmission(
+    OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_ComprehensiveReflectionTransmissionCoefficient) refl_trans_coeff,
+    const float idoth,
+    OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(vec3) value_transmission_coefficient)
 {
+    vec3 value_thin_film_trans_coeff = vec3(0.0f);
     vec3 standard_refl_coeff = vec3(0.0f);
     vec3 standard_trans_coeff = vec3(0.0f);
     vec3 thin_film_refl_coeff = vec3(0.0f);
@@ -250,6 +261,10 @@ openpbr_all_coefficients(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
         {
             thin_film_refl_coeff += refl_trans_coeff.scale_for_reflection_for_transparent_part * thin_film_results.reflectance_dielectric;
             thin_film_trans_coeff += refl_trans_coeff.transmission * (vec3(1.0f) - thin_film_results.reflectance_dielectric);
+            // See above: what openpbr_transmission_coefficient's own thin-film call would have returned.
+            const bool transparent_part_reflects = any(greaterThan(refl_trans_coeff.scale_for_reflection_for_transparent_part, vec3(0.0f)));
+            value_thin_film_trans_coeff +=
+                refl_trans_coeff.transmission * (vec3(1.0f) - (transparent_part_reflects ? thin_film_results.reflectance_dielectric : vec3(0.0f)));
         }
 
         thin_film_refl_coeff += refl_trans_coeff.scale_for_reflection_for_opaque_part * thin_film_results.reflectance_dielectric;
@@ -260,6 +275,7 @@ openpbr_all_coefficients(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
 
     const vec3 refl_coeff = mix(standard_refl_coeff, thin_film_refl_coeff, thin_film_presence);
     const vec3 trans_coeff = mix(standard_trans_coeff, thin_film_trans_coeff, thin_film_presence);
+    value_transmission_coefficient = mix(standard_trans_coeff, value_thin_film_trans_coeff, thin_film_presence);
 
     // Currently, when thin wall is enabled, the thin wall reflection is calculated elsewhere and added here;
     // the tranmission is zeroed out in the thin-wall case using scale_for_reflection_for_transparent_part
@@ -270,15 +286,23 @@ openpbr_all_coefficients(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
     return OPENPBR_MAKE_STRUCT_2(OpenPBR_AllCoefficients, thin_wall_aware_refl_coeff, trans_coeff);
 }
 
-float openpbr_reflection_probability(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_ComprehensiveReflectionTransmissionCoefficient)
-                                         refl_trans_coeff,
-                                     const vec3 path_throughput,
-                                     const float idoth)
+// The default implementations of the reflection and transmission probabilities use both coefficients.
+// Specialized implementations could calculate both based on the same shared factors (such as fresnel and 1-fresnel).
+OpenPBR_AllCoefficients
+openpbr_all_coefficients(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_ComprehensiveReflectionTransmissionCoefficient) refl_trans_coeff,
+                         const float idoth)
+{
+    vec3 unused_value_transmission_coefficient;  // dead code once inlined
+    return openpbr_all_coefficients_with_value_transmission(refl_trans_coeff, idoth, unused_value_transmission_coefficient);
+}
+
+// openpbr_reflection_probability for coefficients already computed - so a caller that
+// also needs them (a combined value and pdf) evaluates them, thin film included, once.
+float openpbr_reflection_probability_from_coefficients(const OpenPBR_AllCoefficients coefficients, const vec3 path_throughput)
 {
     if (!OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency))
         return 1.0f;
 
-    const OpenPBR_AllCoefficients coefficients = openpbr_all_coefficients(refl_trans_coeff, idoth);
     const float reflection_coefficient_max = openpbr_max_component_of_throughput_weighted_color(path_throughput, coefficients.reflection_coefficient);
     const float transmission_coefficient_max =
         openpbr_max_component_of_throughput_weighted_color(path_throughput, coefficients.transmission_coefficient);
@@ -287,21 +311,38 @@ float openpbr_reflection_probability(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_
     return openpbr_safe_divide(reflection_coefficient_max, reflection_coefficient_max + transmission_coefficient_max, 0.0f);
 }
 
-float openpbr_transmission_probability(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_ComprehensiveReflectionTransmissionCoefficient)
-                                           refl_trans_coeff,
-                                       const vec3 path_throughput,
-                                       const float idoth)
+float openpbr_reflection_probability(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_ComprehensiveReflectionTransmissionCoefficient)
+                                         refl_trans_coeff,
+                                     const vec3 path_throughput,
+                                     const float idoth)
+{
+    if (!OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency))
+        return 1.0f;
+
+    return openpbr_reflection_probability_from_coefficients(openpbr_all_coefficients(refl_trans_coeff, idoth), path_throughput);
+}
+
+// openpbr_transmission_probability for coefficients already computed - see
+// openpbr_reflection_probability_from_coefficients.
+float openpbr_transmission_probability_from_coefficients(const OpenPBR_AllCoefficients coefficients, const vec3 path_throughput)
 {
     if (!OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency))
         return 0.0f;
 
-    const OpenPBR_AllCoefficients coefficients = openpbr_all_coefficients(refl_trans_coeff, idoth);
     const float reflection_coefficient_max = openpbr_max_component_of_throughput_weighted_color(path_throughput, coefficients.reflection_coefficient);
     const float transmission_coefficient_max =
         openpbr_max_component_of_throughput_weighted_color(path_throughput, coefficients.transmission_coefficient);
     // Using division rather than subtracting the other probability from one is more numerically stable.
     // openpbr_safe_divide is used to handle the case where the reflection and transmission coefficients are both 0.
     return openpbr_safe_divide(transmission_coefficient_max, reflection_coefficient_max + transmission_coefficient_max, 0.0f);
+}
+
+float openpbr_transmission_probability(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_ComprehensiveReflectionTransmissionCoefficient)
+                                           refl_trans_coeff,
+                                       const vec3 path_throughput,
+                                       const float idoth)
+{
+    return openpbr_transmission_probability_from_coefficients(openpbr_all_coefficients(refl_trans_coeff, idoth), path_throughput);
 }
 
 OpenPBR_AllCoefficientsAndProbabilities openpbr_all_coefficients_and_probabilities(

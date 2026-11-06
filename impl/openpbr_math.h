@@ -82,6 +82,21 @@ OPENPBR_MAYBE_CONSTEXPR_FUNCTION float openpbr_max3(const vec3 v)
     return max(max(v.x, v.y), v.z);
 }
 
+// Component i of v, and v with component i replaced by x, for a loop counter i.
+// v[i] with a counter the compiler does not unroll is a dynamically indexed
+// vector, which GPU compilers place in local memory (an alloca in DXIL); these
+// are three selects instead, so a per-channel loop can stay rolled - one copy
+// of its body - without that.
+OPENPBR_INLINE_FUNCTION float openpbr_component(const vec3 v, const int i)
+{
+    return i == 0 ? v.x : (i == 1 ? v.y : v.z);
+}
+
+OPENPBR_INLINE_FUNCTION vec3 openpbr_with_component(const vec3 v, const int i, const float x)
+{
+    return vec3(i == 0 ? x : v.x, i == 1 ? x : v.y, i == 2 ? x : v.z);
+}
+
 OPENPBR_INLINE_FUNCTION float openpbr_get_cos_theta_local(const vec3 direction_local)
 {
     return direction_local.z;

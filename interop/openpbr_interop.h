@@ -112,4 +112,13 @@
 
 #endif  // !OPENPBR_USE_CUSTOM_INTEROP
 
+// Hooks added after a custom interop layer may have been written: give them a
+// neutral default here so such a layer keeps compiling without defining them.
+#ifndef OPENPBR_UNROLL
+#define OPENPBR_UNROLL
+#endif
+#ifndef OPENPBR_DONT_UNROLL
+#define OPENPBR_DONT_UNROLL
+#endif
+
 #endif  // OPENPBR_INTEROP_H

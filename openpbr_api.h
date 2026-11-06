@@ -51,6 +51,21 @@ OPENPBR_INLINE_FUNCTION void openpbr_sample(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR
     openpbr_sample_impl(prepared, rand, light_direction, weight, pdf, sampled_type);
 }
 
+// openpbr_eval and openpbr_pdf for the same light direction, in one evaluation -
+// what light sampling with MIS needs (the BSDF's value toward the light, and the
+// pdf BSDF sampling would have had of producing that direction). The results
+// equal the two separate calls; the work the two share (the half vector, the
+// specular lobe's Fresnel and thin film) is done once. On GPU targets, where
+// every call site is inlined, prefer this over calling both: it is one copy of
+// the BSDF's evaluation code rather than two.
+OPENPBR_INLINE_FUNCTION void openpbr_eval_and_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_PreparedBsdf) prepared,
+                                                  const vec3 light_direction,
+                                                  OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_DiffuseSpecular) value,
+                                                  OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) pdf)
+{
+    openpbr_eval_and_pdf_impl(prepared, light_direction, value, pdf);
+}
+
 // Returns the PDF for sampling the given light direction.
 OPENPBR_INLINE_FUNCTION float openpbr_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_PreparedBsdf) prepared, const vec3 light_direction)
 {

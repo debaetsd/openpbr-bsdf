@@ -168,6 +168,18 @@ float openpbr_calculate_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(
     }
 }
 
+// Value and pdf toward one light direction - see openpbr_calculate_lobe_value_and_pdf
+// in openpbr_aggregate_lobe.h. Nothing the two share is expensive, so this is the two calls.
+void openpbr_calculate_lobe_value_and_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_DielectricMicrofacetMultipleScatteringLobe) lobe,
+                                          const vec3 view_direction,
+                                          const vec3 light_direction,
+                                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_DiffuseSpecular) value,
+                                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) pdf)
+{
+    value = openpbr_calculate_lobe_value(lobe, view_direction, light_direction);
+    pdf = openpbr_calculate_lobe_pdf(lobe, view_direction, light_direction);
+}
+
 bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_DielectricMicrofacetMultipleScatteringLobe) lobe,
                          const vec3 rand,
                          const vec3 view_direction,
@@ -320,6 +332,18 @@ float openpbr_calculate_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(
     {
         return 0.0f;
     }
+}
+
+// Value and pdf toward one light direction - see openpbr_calculate_lobe_value_and_pdf
+// in openpbr_aggregate_lobe.h. Nothing the two share is expensive, so this is the two calls.
+void openpbr_calculate_lobe_value_and_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_MetalMicrofacetMultipleScatteringLobe) lobe,
+                                          const vec3 view_direction,
+                                          const vec3 light_direction,
+                                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_DiffuseSpecular) value,
+                                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) pdf)
+{
+    value = openpbr_calculate_lobe_value(lobe, view_direction, light_direction);
+    pdf = openpbr_calculate_lobe_pdf(lobe, view_direction, light_direction);
 }
 
 bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_MetalMicrofacetMultipleScatteringLobe) lobe,

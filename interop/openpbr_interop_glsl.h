@@ -53,6 +53,19 @@
 // GLSL does not require an explicit inline keyword.
 #define OPENPBR_INLINE_FUNCTION
 
+// Loop unroll hint, placed before a loop with a small constant trip count (the
+// per-channel and per-lobe loops). Empty: [[unroll]] needs GL_EXT_control_flow_attributes,
+// which a host enables itself (and may then predefine this to [[unroll]]).
+// Predefine OPENPBR_UNROLL to override.
+#ifndef OPENPBR_DONT_UNROLL
+// The opposite hint, for a per-channel loop whose body is large: unrolled it
+// would be three copies of that body. Empty ([[dont_unroll]] needs GL_EXT_control_flow_attributes).
+#define OPENPBR_DONT_UNROLL
+#endif
+#ifndef OPENPBR_UNROLL
+#define OPENPBR_UNROLL
+#endif
+
 // Math type aliases.
 // vec2/vec3/vec4 are built-in keywords in GLSL; no type definitions needed.
 

@@ -57,6 +57,18 @@
 // Slang does not require an explicit inline keyword.
 #define OPENPBR_INLINE_FUNCTION
 
+// Loop unroll hint, placed before a loop with a small constant trip count (the
+// per-channel and per-lobe loops). Slang's [unroll] attribute, as in HLSL.
+// Predefine OPENPBR_UNROLL to override.
+#ifndef OPENPBR_DONT_UNROLL
+// The opposite hint, for a per-channel loop whose body is large: unrolled it
+// would be three copies of that body. Slang's [loop], as in HLSL.
+#define OPENPBR_DONT_UNROLL [loop]
+#endif
+#ifndef OPENPBR_UNROLL
+#define OPENPBR_UNROLL [unroll]
+#endif
+
 // Math type aliases to match GLSL naming conventions.
 // Slang uses float2/float3/float4 (HLSL-style), but OpenPBR code uses vec2/vec3/vec4.
 // Set OPENPBR_USE_CUSTOM_VEC_TYPES = 1 to suppress these if your host already defines them.

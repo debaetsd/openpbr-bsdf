@@ -61,6 +61,17 @@ float openpbr_calculate_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(
 }
 
 // Sample lobe: reflect view, delegate, then swap reflection/transmission bits.
+// Value and pdf: same reflect-then-delegate.
+void openpbr_calculate_lobe_value_and_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OPENPBR_FLIPPED_WRAPPER_LOBE_TYPE) lobe,
+                                          const vec3 view_direction,
+                                          const vec3 light_direction,
+                                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_DiffuseSpecular) value,
+                                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) pdf)
+{
+    const vec3 reflected_view = reflect(view_direction, lobe.flipped_lobe.normal_ff);  // reflects view across surface (view points away from surface)
+    openpbr_calculate_lobe_value_and_pdf(lobe.flipped_lobe, reflected_view, light_direction, value, pdf);
+}
+
 bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OPENPBR_FLIPPED_WRAPPER_LOBE_TYPE) lobe,
                          const vec3 rand,
                          const vec3 view_direction,

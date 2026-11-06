@@ -85,6 +85,19 @@
 // Use inline to avoid multiple-definition issues across translation units.
 #define OPENPBR_INLINE_FUNCTION inline
 
+// Loop unroll hint, placed before a loop with a small constant trip count (the
+// per-channel and per-lobe loops). Empty: there is no portable C++ spelling, and optimizing
+// compilers unroll these loops on their own.
+// Predefine OPENPBR_UNROLL to override.
+#ifndef OPENPBR_DONT_UNROLL
+// The opposite hint, for a per-channel loop whose body is large: unrolled it
+// would be three copies of that body. Empty, like OPENPBR_UNROLL.
+#define OPENPBR_DONT_UNROLL
+#endif
+#ifndef OPENPBR_UNROLL
+#define OPENPBR_UNROLL
+#endif
+
 // Math type aliases to match GLSL naming conventions.
 // When OPENPBR_USE_CUSTOM_VEC_TYPES = 0 (default), these declarations import GLM vec types
 // and math functions into the global namespace under GLSL-compatible names so that OpenPBR
