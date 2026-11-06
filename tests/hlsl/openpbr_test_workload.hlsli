@@ -2,7 +2,7 @@
 //
 // Every test shader includes this after configuring its OpenPBR settings and
 // including openpbr.h. It touches the whole public API - prepare / eval / sample
-// / pdf / eval_and_pdf - plus the prepared volume and emission outputs, so that DXC has to
+// / pdf / eval_and_pdf / sample_direction - plus the prepared volume and emission outputs, so that DXC has to
 // instantiate and codegen essentially all of the implementation. The result is
 // folded into a single float4 that the caller writes out, which keeps DXC from
 // dead-code-eliminating any of it.
@@ -101,6 +101,14 @@ float4 openpbr_test_workload(const float seed)
     openpbr_sample(prepared, vec3(frac(seed * 0.13f), frac(seed * 0.29f), frac(seed * 0.71f)), sampled_direction,
                    sampled_weight, sampled_pdf, sampled_type);
 
+    // direction only (openpbr_sample_direction), with different random numbers
+    vec3 direction_only;
+    OpenPBR_DiffuseSpecular delta_weight;
+    float delta_pdf;
+    OpenPBR_BsdfLobeType direction_type;
+    openpbr_sample_direction(prepared, vec3(frac(seed * 0.47f), frac(seed * 0.53f), frac(seed * 0.19f)), direction_only,
+                             delta_weight, delta_pdf, direction_type);
+
     // Prepared-state outputs: emission and the homogeneous volume.
     const vec3 emission = prepared.emission;
     const vec3 volume_extinction = prepared.volume.extinction_coefficient;
@@ -108,11 +116,11 @@ float4 openpbr_test_workload(const float seed)
 
     vec3 rgb = evaluated.diffuse + evaluated.specular + combined_value.diffuse + combined_value.specular;
     rgb += sampled_weight.diffuse + sampled_weight.specular;
-    rgb += sampled_direction;
+    rgb += sampled_direction + direction_only + delta_weight.diffuse + delta_weight.specular;
     rgb += emission;
     rgb += volume_extinction + volume_scattering_albedo;
 
-    const float alpha = eval_pdf + combined_pdf + sampled_pdf + float(sampled_type) + float(prepared.volume.anisotropy);
+    const float alpha = eval_pdf + combined_pdf + sampled_pdf + delta_pdf + float(direction_type) + float(sampled_type) + float(prepared.volume.anisotropy);
 
     return float4(rgb, alpha);
 }

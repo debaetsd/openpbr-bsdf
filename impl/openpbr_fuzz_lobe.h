@@ -449,7 +449,12 @@ OpenPBR_DiffuseSpecular openpbr_fuzz_value_over_base(OPENPBR_ADDRESS_SPACE_THREA
                                                      const vec3 light_direction)
 {
     const vec3 light_dir_local = openpbr_world_to_local(lobe.basis, light_direction);
-    const vec3 sheen_value = openpbr_disney_sheen_f(lobe, lobe.view_dir_local, light_dir_local);
+    // The sheen's value includes presence, so at zero presence it is skipped under
+    // OPENPBR_SKIP_INACTIVE_LOBES (see openpbr_settings.h). Its pdf is not: it enters
+    // through the sheen probability, which falls back to 0.5.
+    const vec3 sheen_value = OPENPBR_SKIP_INACTIVE_LOBES_ENABLED && lobe.presence == 0.0f
+                                 ? vec3(0.0f)
+                                 : openpbr_disney_sheen_f(lobe, lobe.view_dir_local, light_dir_local);
 
     return openpbr_add_diffuse_specular(openpbr_scale_diffuse_specular(base_value, openpbr_base_layer_scale_complete(lobe, light_dir_local)),
                                         openpbr_make_diffuse_specular_from_specular(sheen_value));
@@ -530,16 +535,26 @@ bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
         // Unit-length by construction, but normalize to control for rounding error in the basis rotation.
         light_direction = openpbr_fast_normalize(openpbr_local_to_world(lobe.basis, light_dir_local));
 
-        // The layers below, valued and pdf'd in one combined evaluation.
-        OpenPBR_DiffuseSpecular base_value;
-        float base_pdf;
-        openpbr_calculate_lobe_value_and_pdf(lobe.coating_lobe, view_direction, light_direction, base_value, base_pdf);
+        if (OPENPBR_SAMPLE_REEVALUATE_ENABLED)
+        {
+            // Non-delta: the caller evaluates the direction. Only the sheen's own
+            // terms, so the sample still reports a positive pdf.
+            pdf = openpbr_disney_sheen_pdf(lobe, lobe.view_dir_local, light_dir_local) * sheen_prob;
+            weight = openpbr_make_zero_diffuse_specular();
+        }
+        else
+        {
+            // The layers below, valued and pdf'd in one combined evaluation.
+            OpenPBR_DiffuseSpecular base_value;
+            float base_pdf;
+            openpbr_calculate_lobe_value_and_pdf(lobe.coating_lobe, view_direction, light_direction, base_value, base_pdf);
 
-        pdf = openpbr_disney_sheen_pdf(lobe, lobe.view_dir_local, light_dir_local) * sheen_prob;
-        pdf += base_pdf * base_prob;  // The returned pdf takes both lobes into account.
+            pdf = openpbr_disney_sheen_pdf(lobe, lobe.view_dir_local, light_dir_local) * sheen_prob;
+            pdf += base_pdf * base_prob;  // The returned pdf takes both lobes into account.
 
-        weight = openpbr_scale_diffuse_specular(openpbr_fuzz_value_over_base(lobe, base_value, light_direction),
-                                                1.0f / pdf);  // The returned weight takes both lobes into account.
+            weight = openpbr_scale_diffuse_specular(openpbr_fuzz_value_over_base(lobe, base_value, light_direction),
+                                                    1.0f / pdf);  // The returned weight takes both lobes into account.
+        }
 
         sampled_type = OpenPBR_BsdfLobeTypeGlossy | OpenPBR_BsdfLobeTypeReflection;
     }
@@ -559,7 +574,11 @@ bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
 
         const vec3 light_dir_local = openpbr_world_to_local(lobe.basis, light_direction);
 
-        if (!bool(sampled_type & OpenPBR_BsdfLobeTypeSpecular))  // non-delta
+        if (OPENPBR_SAMPLE_REEVALUATE_ENABLED && !bool(sampled_type & OpenPBR_BsdfLobeTypeSpecular))
+        {
+            // Non-delta: the caller evaluates the direction (OPENPBR_SAMPLE_REEVALUATE).
+        }
+        else if (!bool(sampled_type & OpenPBR_BsdfLobeTypeSpecular))  // non-delta
         {
             OpenPBR_DiffuseSpecular bsdf_cos = openpbr_scale_diffuse_specular(weight, pdf);
             bsdf_cos = openpbr_scale_diffuse_specular(bsdf_cos, openpbr_base_layer_scale_complete(lobe, light_dir_local));

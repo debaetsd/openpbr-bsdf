@@ -26,6 +26,8 @@
 //
 // Appearance / behavior:
 //   - OPENPBR_RECIPROCAL_COAT_AND_FUZZ — 0 (default, view-side attenuation) or 1 (symmetric attenuation)
+//   - OPENPBR_SAMPLE_REEVALUATE        — 0 (default, composed sample weights) or 1 (one evaluation of the sampled direction)
+//   - OPENPBR_SKIP_INACTIVE_LOBES      — 0 (default) or 1 (skip zero-weight lobes; approximate, see below)
 //
 // Auto-configured; override only if the default is wrong for your target:
 //   - OPENPBR_LANGUAGE_TARGET_*        — auto-detected from compiler macros (including DXC/HLSL); set explicitly for Slang
@@ -143,6 +145,76 @@
 #ifndef OPENPBR_RECIPROCAL_COAT_AND_FUZZ
 #define OPENPBR_RECIPROCAL_COAT_AND_FUZZ 0
 #endif
+
+// =======================================
+// Sampling: compose, or evaluate once
+// =======================================
+//
+// openpbr_sample picks one lobe through the layers (fuzz, coat, base aggregate)
+// and, for a non-delta sample, builds its weight and pdf on the way back up: each
+// layer adds the value and pdf of everything it did not pick to what the picked
+// lobe reported about itself.
+//
+// OPENPBR_SAMPLE_REEVALUATE = 0 (Default)
+//   - Composes, as described. The picked lobe's own terms come from its sampling
+//     formulas (e.g. the sampled microfacet normal itself).
+//
+// OPENPBR_SAMPLE_REEVALUATE = 1
+//   - The layers only choose the direction; openpbr_sample then evaluates the
+//     whole BSDF once in that direction (openpbr_eval_and_pdf) and returns
+//     value / pdf. Delta samples are unchanged.
+//   - Much less code on GPU targets, where every one of those compositions is an
+//     inlined copy of the lobes below it; and openpbr_sample_direction lets an
+//     integrator that evaluates the sampled direction anyway (for MIS) skip the
+//     evaluation entirely.
+//   - The returned pdf is then exactly openpbr_pdf in that direction. Not
+//     bit-identical to the default: the picked lobe's terms are recomputed from the
+//     final direction (a re-derived half vector) instead of taken from its sampling
+//     formulas. Mostly rounding-level, but on very low-roughness lobes the two can
+//     differ substantially (pdfs by tens of percent, occasionally one of them 0),
+//     and the result follows openpbr_pdf. Directions, lobe types and validity are
+//     unchanged, and the mean weight (the directional albedo) is unchanged.
+//
+// Example:
+//   #define OPENPBR_SAMPLE_REEVALUATE 1
+//   #include "openpbr.h"
+//
+#ifndef OPENPBR_SAMPLE_REEVALUATE
+#define OPENPBR_SAMPLE_REEVALUATE 0
+#endif
+
+// =======================================
+// Skipping inactive lobes
+// =======================================
+//
+// The base aggregate evaluates all of its lobes in every direction, the
+// thin-walled ones on a closed object and the metal ones on a dielectric
+// included, and the coat and fuzz layers evaluate theirs at zero presence.
+//
+// OPENPBR_SKIP_INACTIVE_LOBES = 0 (Default)
+//   - Every lobe is evaluated.
+//
+// OPENPBR_SKIP_INACTIVE_LOBES = 1
+//   - Terms that provably contribute nothing are not evaluated, in eval, pdf and
+//     the evaluations inside sampling: a base lobe's value when its own scale
+//     (albedo, reflection scale) is zero; its pdf when its sampling weight is zero;
+//     the coat's and sheen's values at zero presence; the coat's pdf when its
+//     selection probability is zero.
+//   - Results are unchanged except where a skipped term would have been NaN or
+//     Inf (0 * x is no longer computed). The specular lobe is always evaluated.
+//
+// Example:
+//   #define OPENPBR_SKIP_INACTIVE_LOBES 1
+//   #include "openpbr.h"
+//
+#ifndef OPENPBR_SKIP_INACTIVE_LOBES
+#define OPENPBR_SKIP_INACTIVE_LOBES 0
+#endif
+
+// The two options above as booleans, for use in expressions: GLSL has no
+// implicit int-to-bool conversion, so the 0/1 macros cannot appear in if/!/&&.
+#define OPENPBR_SAMPLE_REEVALUATE_ENABLED (OPENPBR_SAMPLE_REEVALUATE != 0)
+#define OPENPBR_SKIP_INACTIVE_LOBES_ENABLED (OPENPBR_SKIP_INACTIVE_LOBES != 0)
 
 // ===============
 // Fast Math Hooks

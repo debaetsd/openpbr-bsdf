@@ -1,0 +1,59 @@
+// GLSL compilation test (tests/compile_glsl.py): the public API in a compute shader,
+// every lobe enabled, so glslang has to accept essentially all of the implementation.
+#version 460
+#extension GL_GOOGLE_include_directive : require
+
+#define OPENPBR_LANGUAGE_TARGET_GLSL 1
+#include "openpbr.h"
+
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) buffer Output
+{
+    vec4 result[];
+};
+
+void main()
+{
+    const float seed = float(gl_GlobalInvocationID.x);
+
+    OpenPBR_ResolvedInputs inputs = openpbr_make_default_resolved_inputs();
+    inputs.base_metalness = fract(seed * 0.37);
+    inputs.specular_roughness = 0.05 + 0.9 * fract(seed * 0.11);
+    inputs.coat_weight = 0.6;
+    inputs.fuzz_weight = 0.4;
+    inputs.subsurface_weight = 0.3;
+    inputs.transmission_weight = 0.5;
+    inputs.transmission_dispersion_scale = 0.5;
+    inputs.thin_film_weight = 0.7;
+    inputs.thin_film_thickness = 0.4;
+
+    const vec3 view_direction = normalize(vec3(0.3, 0.2, 0.9));
+    const vec3 light_direction = normalize(vec3(-0.25, 0.15, 0.8));
+    const OpenPBR_PreparedBsdf prepared = openpbr_prepare(inputs, vec3(1.0), OpenPBR_BaseRgbWavelengths_nm, 1.0, view_direction);
+
+    const OpenPBR_DiffuseSpecular evaluated = openpbr_eval(prepared, light_direction);
+    const float eval_pdf = openpbr_pdf(prepared, light_direction);
+    OpenPBR_DiffuseSpecular combined_value;
+    float combined_pdf;
+    openpbr_eval_and_pdf(prepared, normalize(vec3(0.1, -0.3, -0.9)), combined_value, combined_pdf);
+
+    vec3 sampled_direction;
+    OpenPBR_DiffuseSpecular sampled_weight;
+    float sampled_pdf;
+    OpenPBR_BsdfLobeType sampled_type;
+    openpbr_sample(prepared, vec3(fract(seed * 0.13), fract(seed * 0.29), fract(seed * 0.71)), sampled_direction, sampled_weight,
+                   sampled_pdf, sampled_type);
+
+    vec3 direction_only;
+    OpenPBR_DiffuseSpecular delta_weight;
+    float delta_pdf;
+    OpenPBR_BsdfLobeType direction_type;
+    openpbr_sample_direction(prepared, vec3(fract(seed * 0.47), fract(seed * 0.53), fract(seed * 0.19)), direction_only, delta_weight,
+                             delta_pdf, direction_type);
+
+    vec3 rgb = evaluated.diffuse + evaluated.specular + combined_value.diffuse + combined_value.specular;
+    rgb += sampled_weight.diffuse + sampled_weight.specular + sampled_direction + direction_only + delta_weight.specular;
+    rgb += prepared.emission + prepared.volume.extinction_coefficient + prepared.volume.albedo;
+    result[gl_GlobalInvocationID.x] =
+        vec4(rgb, eval_pdf + combined_pdf + sampled_pdf + delta_pdf + float(sampled_type) + float(direction_type));
+}

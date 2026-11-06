@@ -996,6 +996,7 @@ void openpbr_sample_impl(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) pdf,
                          OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_BsdfLobeType) sampled_type)
 {
+    // With OPENPBR_SAMPLE_REEVALUATE the evaluation below needs openpbr_eval_and_pdf_impl, defined above.
     const bool valid_sample =
         OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableSheenAndCoat)
             ? openpbr_sample_lobe(prepared.fuzz_lobe, rand, prepared.view_direction, light_direction, weight, pdf, sampled_type)
@@ -1010,6 +1011,34 @@ void openpbr_sample_impl(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
         // but internal lobes use a bool to specify this explicitly.
         pdf = 0.0f;
     }
+    else if (OPENPBR_SAMPLE_REEVALUATE_ENABLED && !bool(sampled_type & OpenPBR_BsdfLobeTypeSpecular))
+    {
+        // The layers only chose the direction (see openpbr_settings.h): one evaluation
+        // of the whole BSDF there gives the weight, with exactly openpbr_pdf's pdf.
+        OpenPBR_DiffuseSpecular value;
+        openpbr_eval_and_pdf_impl(prepared, light_direction, value, pdf);
+        if (pdf > 0.0f)
+            weight = openpbr_scale_diffuse_specular(value, 1.0f / pdf);
+        else
+            pdf = 0.0f;
+    }
+}
+
+// openpbr_sample without the evaluation of a non-delta sample - see openpbr_sample_direction.
+void openpbr_sample_direction_impl(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_PreparedBsdf) prepared,
+                                   const vec3 rand,
+                                   OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(vec3) light_direction,
+                                   OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_DiffuseSpecular) delta_weight,
+                                   OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) delta_pdf,
+                                   OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_BsdfLobeType) sampled_type)
+{
+    const bool valid_sample =
+        OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableSheenAndCoat)
+            ? openpbr_sample_lobe(prepared.fuzz_lobe, rand, prepared.view_direction, light_direction, delta_weight, delta_pdf, sampled_type)
+            : openpbr_sample_lobe(
+                  prepared.fuzz_lobe.coating_lobe.base_lobe, rand, prepared.view_direction, light_direction, delta_weight, delta_pdf, sampled_type);
+    if (!valid_sample)
+        delta_pdf = 0.0f;
 }
 
 float openpbr_pdf_impl(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_PreparedBsdf) prepared, const vec3 light_direction)

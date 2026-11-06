@@ -505,14 +505,24 @@ bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
             }
 
             // TODO: Only perform the necessary calculations.
-            OpenPBR_DiffuseSpecular bsdf_cos;
-            openpbr_calculate_lobe_value_and_pdf(lobe, view_direction, light_direction, bsdf_cos, pdf);
-            if (pdf == 0.0f)
+            if (OPENPBR_SAMPLE_REEVALUATE_ENABLED)
             {
-                openpbr_clear_lobe_sampling_output(light_direction, weight, pdf, sampled_type);
-                return false;
+                // The caller evaluates the direction; a positive placeholder pdf marks
+                // the sample valid (the evaluation rejects it if its pdf is zero).
+                pdf = 1.0f;
+                weight = openpbr_make_zero_diffuse_specular();
             }
-            weight = openpbr_scale_diffuse_specular(bsdf_cos, 1.0f / pdf);
+            else
+            {
+                OpenPBR_DiffuseSpecular bsdf_cos;
+                openpbr_calculate_lobe_value_and_pdf(lobe, view_direction, light_direction, bsdf_cos, pdf);
+                if (pdf == 0.0f)
+                {
+                    openpbr_clear_lobe_sampling_output(light_direction, weight, pdf, sampled_type);
+                    return false;
+                }
+                weight = openpbr_scale_diffuse_specular(bsdf_cos, 1.0f / pdf);
+            }
 
             // It's very important to return the correct type to ensure correct treatment by outside systems.
             sampled_type = OpenPBR_BsdfLobeTypeGlossy | OpenPBR_BsdfLobeTypeTransmission;

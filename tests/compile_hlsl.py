@@ -210,6 +210,10 @@ VARIANTS = [
     # -Zi forces debug info through the DXIL writer, which has its own failure
     # modes around large constant arrays.
     Variant(name="debug", args=("-Zi", "-Qembed_debug"), only_shaders=("compute",)),
+    # The approximate options in openpbr_settings.h, which compile different code
+    # paths through the layers' sampling and the base aggregate.
+    Variant(name="reevaluate", args=("-DOPENPBR_SAMPLE_REEVALUATE=1",), only_shaders=("compute", "raytracing")),
+    Variant(name="skip-inactive", args=("-DOPENPBR_SKIP_INACTIVE_LOBES=1",), only_shaders=("compute", "raytracing")),
 ]
 
 # One variant per feature-toggle combination, the way a D3D12 renderer consumes

@@ -180,20 +180,54 @@ OpenPBR_BsdfLobeType openpbr_get_lobe_type(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_
     return result;
 }
 
+// OPENPBR_SKIP_INACTIVE_LOBES (see openpbr_settings.h): which base lobes can be left
+// out without changing a result. Always true when the option is off.
+//
+// A lobe's value is proportional to its own scale (albedo, reflection scale), so
+// with that identically zero its value is exactly zero. The specular lobe has no
+// single such scale and is always evaluated.
+bool openpbr_lobe_may_have_value(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_AggregateLobe) lobe, const int lobe_index)
+{
+    if (!OPENPBR_SKIP_INACTIVE_LOBES_ENABLED)
+        return true;
+    if (lobe_index == OpenPBR_DielectricMMSLobeIndex)
+        return any(notEqual(lobe.dielectric_mms_lobe.scale_refl, vec3(0.0f))) || any(notEqual(lobe.dielectric_mms_lobe.scale_trans, vec3(0.0f)));
+    if (lobe_index == OpenPBR_MetalMMSLobeIndex)
+        return any(notEqual(lobe.metal_mms_lobe.scale, vec3(0.0f)));
+    if (lobe_index == OpenPBR_DiffuseLobeIndex)
+        return any(notEqual(lobe.diffuse_lobe.diffuse_albedo, vec3(0.0f)));
+    if (lobe_index == OpenPBR_ThinWallSpecularTransLobeIndex)
+        return any(notEqual(lobe.thin_wall_specular_trans_lobe.flipped_lobe.refl_trans_coeff.color, vec3(0.0f)));
+    if (lobe_index == OpenPBR_ThinWallDiffuseTransLobeIndex)
+        return any(notEqual(lobe.thin_wall_diffuse_trans_lobe.flipped_lobe.diffuse_albedo, vec3(0.0f)));
+    return true;
+}
+
+// A lobe's pdf enters the aggregate's weighted by its sampling weight, so with a
+// zero weight it contributes exactly nothing.
+bool openpbr_lobe_is_sampled(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_AggregateLobe) lobe, const int lobe_index)
+{
+    return !OPENPBR_SKIP_INACTIVE_LOBES_ENABLED || lobe.lobe_weights[lobe_index] > 0.0f;
+}
+
 OpenPBR_DiffuseSpecular openpbr_calculate_lobe_value(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_AggregateLobe) lobe,
                                                      const vec3 view_direction,
                                                      const vec3 light_direction)
 {
     OpenPBR_DiffuseSpecular result = openpbr_make_zero_diffuse_specular();
 
-    result = openpbr_add_diffuse_specular(result, openpbr_calculate_lobe_value(lobe.specular_lobe, view_direction, light_direction));
-    if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency))
+    if (openpbr_lobe_may_have_value(lobe, OpenPBR_SpecularLobeIndex))
+        result = openpbr_add_diffuse_specular(result, openpbr_calculate_lobe_value(lobe.specular_lobe, view_direction, light_direction));
+    if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency) && openpbr_lobe_may_have_value(lobe, OpenPBR_DielectricMMSLobeIndex))
         result = openpbr_add_diffuse_specular(result, openpbr_calculate_lobe_value(lobe.dielectric_mms_lobe, view_direction, light_direction));
-    if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableMetallic))
+    if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableMetallic) && openpbr_lobe_may_have_value(lobe, OpenPBR_MetalMMSLobeIndex))
         result = openpbr_add_diffuse_specular(result, openpbr_calculate_lobe_value(lobe.metal_mms_lobe, view_direction, light_direction));
-    result = openpbr_add_diffuse_specular(result, openpbr_calculate_lobe_value(lobe.diffuse_lobe, view_direction, light_direction));
-    result = openpbr_add_diffuse_specular(result, openpbr_calculate_lobe_value(lobe.thin_wall_specular_trans_lobe, view_direction, light_direction));
-    result = openpbr_add_diffuse_specular(result, openpbr_calculate_lobe_value(lobe.thin_wall_diffuse_trans_lobe, view_direction, light_direction));
+    if (openpbr_lobe_may_have_value(lobe, OpenPBR_DiffuseLobeIndex))
+        result = openpbr_add_diffuse_specular(result, openpbr_calculate_lobe_value(lobe.diffuse_lobe, view_direction, light_direction));
+    if (openpbr_lobe_may_have_value(lobe, OpenPBR_ThinWallSpecularTransLobeIndex))
+        result = openpbr_add_diffuse_specular(result, openpbr_calculate_lobe_value(lobe.thin_wall_specular_trans_lobe, view_direction, light_direction));
+    if (openpbr_lobe_may_have_value(lobe, OpenPBR_ThinWallDiffuseTransLobeIndex))
+        result = openpbr_add_diffuse_specular(result, openpbr_calculate_lobe_value(lobe.thin_wall_diffuse_trans_lobe, view_direction, light_direction));
 
     return result;
 }
@@ -207,34 +241,40 @@ float openpbr_calculate_lobe_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(
 
     {
         const float weight = lobe.lobe_weights[OpenPBR_SpecularLobeIndex];
-        sum += weight * openpbr_calculate_lobe_pdf(lobe.specular_lobe, view_direction, light_direction);
+        if (openpbr_lobe_is_sampled(lobe, OpenPBR_SpecularLobeIndex))
+            sum += weight * openpbr_calculate_lobe_pdf(lobe.specular_lobe, view_direction, light_direction);
         total_weight += weight;
     }
     if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency))
     {
         const float weight = lobe.lobe_weights[OpenPBR_DielectricMMSLobeIndex];
-        sum += weight * openpbr_calculate_lobe_pdf(lobe.dielectric_mms_lobe, view_direction, light_direction);
+        if (openpbr_lobe_is_sampled(lobe, OpenPBR_DielectricMMSLobeIndex))
+            sum += weight * openpbr_calculate_lobe_pdf(lobe.dielectric_mms_lobe, view_direction, light_direction);
         total_weight += weight;
     }
     if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableMetallic))
     {
         const float weight = lobe.lobe_weights[OpenPBR_MetalMMSLobeIndex];
-        sum += weight * openpbr_calculate_lobe_pdf(lobe.metal_mms_lobe, view_direction, light_direction);
+        if (openpbr_lobe_is_sampled(lobe, OpenPBR_MetalMMSLobeIndex))
+            sum += weight * openpbr_calculate_lobe_pdf(lobe.metal_mms_lobe, view_direction, light_direction);
         total_weight += weight;
     }
     {
         const float weight = lobe.lobe_weights[OpenPBR_DiffuseLobeIndex];
-        sum += weight * openpbr_calculate_lobe_pdf(lobe.diffuse_lobe, view_direction, light_direction);
+        if (openpbr_lobe_is_sampled(lobe, OpenPBR_DiffuseLobeIndex))
+            sum += weight * openpbr_calculate_lobe_pdf(lobe.diffuse_lobe, view_direction, light_direction);
         total_weight += weight;
     }
     {
         const float weight = lobe.lobe_weights[OpenPBR_ThinWallSpecularTransLobeIndex];
-        sum += weight * openpbr_calculate_lobe_pdf(lobe.thin_wall_specular_trans_lobe, view_direction, light_direction);
+        if (openpbr_lobe_is_sampled(lobe, OpenPBR_ThinWallSpecularTransLobeIndex))
+            sum += weight * openpbr_calculate_lobe_pdf(lobe.thin_wall_specular_trans_lobe, view_direction, light_direction);
         total_weight += weight;
     }
     {
         const float weight = lobe.lobe_weights[OpenPBR_ThinWallDiffuseTransLobeIndex];
-        sum += weight * openpbr_calculate_lobe_pdf(lobe.thin_wall_diffuse_trans_lobe, view_direction, light_direction);
+        if (openpbr_lobe_is_sampled(lobe, OpenPBR_ThinWallDiffuseTransLobeIndex))
+            sum += weight * openpbr_calculate_lobe_pdf(lobe.thin_wall_diffuse_trans_lobe, view_direction, light_direction);
         total_weight += weight;
     }
 
@@ -261,35 +301,53 @@ void openpbr_calculate_lobe_value_and_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_C
     float lobe_pdf;
 
     // Same lobes, same order as openpbr_calculate_lobe_value and _pdf.
-    openpbr_calculate_lobe_value_and_pdf(lobe.specular_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
-    value = openpbr_add_diffuse_specular(value, lobe_value);
-    sum += lobe.lobe_weights[OpenPBR_SpecularLobeIndex] * lobe_pdf;
+    if ((openpbr_lobe_may_have_value(lobe, OpenPBR_SpecularLobeIndex) || openpbr_lobe_is_sampled(lobe, OpenPBR_SpecularLobeIndex)))
+    {
+        openpbr_calculate_lobe_value_and_pdf(lobe.specular_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
+        value = openpbr_add_diffuse_specular(value, lobe_value);
+        sum += lobe.lobe_weights[OpenPBR_SpecularLobeIndex] * lobe_pdf;
+    }
     total_weight += lobe.lobe_weights[OpenPBR_SpecularLobeIndex];
     if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency))
     {
-        openpbr_calculate_lobe_value_and_pdf(lobe.dielectric_mms_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
-        value = openpbr_add_diffuse_specular(value, lobe_value);
-        sum += lobe.lobe_weights[OpenPBR_DielectricMMSLobeIndex] * lobe_pdf;
+        if ((openpbr_lobe_may_have_value(lobe, OpenPBR_DielectricMMSLobeIndex) || openpbr_lobe_is_sampled(lobe, OpenPBR_DielectricMMSLobeIndex)))
+        {
+            openpbr_calculate_lobe_value_and_pdf(lobe.dielectric_mms_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
+            value = openpbr_add_diffuse_specular(value, lobe_value);
+            sum += lobe.lobe_weights[OpenPBR_DielectricMMSLobeIndex] * lobe_pdf;
+        }
         total_weight += lobe.lobe_weights[OpenPBR_DielectricMMSLobeIndex];
     }
     if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableMetallic))
     {
-        openpbr_calculate_lobe_value_and_pdf(lobe.metal_mms_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
-        value = openpbr_add_diffuse_specular(value, lobe_value);
-        sum += lobe.lobe_weights[OpenPBR_MetalMMSLobeIndex] * lobe_pdf;
+        if ((openpbr_lobe_may_have_value(lobe, OpenPBR_MetalMMSLobeIndex) || openpbr_lobe_is_sampled(lobe, OpenPBR_MetalMMSLobeIndex)))
+        {
+            openpbr_calculate_lobe_value_and_pdf(lobe.metal_mms_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
+            value = openpbr_add_diffuse_specular(value, lobe_value);
+            sum += lobe.lobe_weights[OpenPBR_MetalMMSLobeIndex] * lobe_pdf;
+        }
         total_weight += lobe.lobe_weights[OpenPBR_MetalMMSLobeIndex];
     }
-    openpbr_calculate_lobe_value_and_pdf(lobe.diffuse_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
-    value = openpbr_add_diffuse_specular(value, lobe_value);
-    sum += lobe.lobe_weights[OpenPBR_DiffuseLobeIndex] * lobe_pdf;
+    if ((openpbr_lobe_may_have_value(lobe, OpenPBR_DiffuseLobeIndex) || openpbr_lobe_is_sampled(lobe, OpenPBR_DiffuseLobeIndex)))
+    {
+        openpbr_calculate_lobe_value_and_pdf(lobe.diffuse_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
+        value = openpbr_add_diffuse_specular(value, lobe_value);
+        sum += lobe.lobe_weights[OpenPBR_DiffuseLobeIndex] * lobe_pdf;
+    }
     total_weight += lobe.lobe_weights[OpenPBR_DiffuseLobeIndex];
-    openpbr_calculate_lobe_value_and_pdf(lobe.thin_wall_specular_trans_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
-    value = openpbr_add_diffuse_specular(value, lobe_value);
-    sum += lobe.lobe_weights[OpenPBR_ThinWallSpecularTransLobeIndex] * lobe_pdf;
+    if ((openpbr_lobe_may_have_value(lobe, OpenPBR_ThinWallSpecularTransLobeIndex) || openpbr_lobe_is_sampled(lobe, OpenPBR_ThinWallSpecularTransLobeIndex)))
+    {
+        openpbr_calculate_lobe_value_and_pdf(lobe.thin_wall_specular_trans_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
+        value = openpbr_add_diffuse_specular(value, lobe_value);
+        sum += lobe.lobe_weights[OpenPBR_ThinWallSpecularTransLobeIndex] * lobe_pdf;
+    }
     total_weight += lobe.lobe_weights[OpenPBR_ThinWallSpecularTransLobeIndex];
-    openpbr_calculate_lobe_value_and_pdf(lobe.thin_wall_diffuse_trans_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
-    value = openpbr_add_diffuse_specular(value, lobe_value);
-    sum += lobe.lobe_weights[OpenPBR_ThinWallDiffuseTransLobeIndex] * lobe_pdf;
+    if ((openpbr_lobe_may_have_value(lobe, OpenPBR_ThinWallDiffuseTransLobeIndex) || openpbr_lobe_is_sampled(lobe, OpenPBR_ThinWallDiffuseTransLobeIndex)))
+    {
+        openpbr_calculate_lobe_value_and_pdf(lobe.thin_wall_diffuse_trans_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
+        value = openpbr_add_diffuse_specular(value, lobe_value);
+        sum += lobe.lobe_weights[OpenPBR_ThinWallDiffuseTransLobeIndex] * lobe_pdf;
+    }
     total_weight += lobe.lobe_weights[OpenPBR_ThinWallDiffuseTransLobeIndex];
 
     pdf = total_weight > 0.0f ? sum / total_weight : 0.0f;
@@ -345,8 +403,9 @@ bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
     if (!valid_sample)
         return false;
 
-    // Compute overall weight and pdf with all matched lobes.
-    if (!bool(sampled_type & OpenPBR_BsdfLobeTypeSpecular))
+    // Compute overall weight and pdf with all matched lobes - unless the whole BSDF
+    // is evaluated in the sampled direction afterwards (OPENPBR_SAMPLE_REEVALUATE).
+    if (!OPENPBR_SAMPLE_REEVALUATE_ENABLED && !bool(sampled_type & OpenPBR_BsdfLobeTypeSpecular))
     {
         OPENPBR_ASSERT(pdf > 0.0f, "Non-delta lobe samples must either set a positive PDF or return false");
         OpenPBR_DiffuseSpecular bsdf_cos = openpbr_scale_diffuse_specular(weight, pdf);
@@ -356,37 +415,37 @@ bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
         // evaluation each (openpbr_calculate_lobe_value_and_pdf).
         OpenPBR_DiffuseSpecular lobe_value;
         float lobe_pdf;
-        if (selected_lobe_index != OpenPBR_SpecularLobeIndex)
+        if (selected_lobe_index != OpenPBR_SpecularLobeIndex && (openpbr_lobe_may_have_value(lobe, OpenPBR_SpecularLobeIndex) || openpbr_lobe_is_sampled(lobe, OpenPBR_SpecularLobeIndex)))
         {
             openpbr_calculate_lobe_value_and_pdf(lobe.specular_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
             bsdf_cos = openpbr_add_diffuse_specular(bsdf_cos, lobe_value);
             pdf += lobe.lobe_weights[OpenPBR_SpecularLobeIndex] * lobe_pdf;
         }
-        if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency) && selected_lobe_index != OpenPBR_DielectricMMSLobeIndex)
+        if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency) && selected_lobe_index != OpenPBR_DielectricMMSLobeIndex && (openpbr_lobe_may_have_value(lobe, OpenPBR_DielectricMMSLobeIndex) || openpbr_lobe_is_sampled(lobe, OpenPBR_DielectricMMSLobeIndex)))
         {
             openpbr_calculate_lobe_value_and_pdf(lobe.dielectric_mms_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
             bsdf_cos = openpbr_add_diffuse_specular(bsdf_cos, lobe_value);
             pdf += lobe.lobe_weights[OpenPBR_DielectricMMSLobeIndex] * lobe_pdf;
         }
-        if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableMetallic) && selected_lobe_index != OpenPBR_MetalMMSLobeIndex)
+        if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableMetallic) && selected_lobe_index != OpenPBR_MetalMMSLobeIndex && (openpbr_lobe_may_have_value(lobe, OpenPBR_MetalMMSLobeIndex) || openpbr_lobe_is_sampled(lobe, OpenPBR_MetalMMSLobeIndex)))
         {
             openpbr_calculate_lobe_value_and_pdf(lobe.metal_mms_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
             bsdf_cos = openpbr_add_diffuse_specular(bsdf_cos, lobe_value);
             pdf += lobe.lobe_weights[OpenPBR_MetalMMSLobeIndex] * lobe_pdf;
         }
-        if (selected_lobe_index != OpenPBR_DiffuseLobeIndex)
+        if (selected_lobe_index != OpenPBR_DiffuseLobeIndex && (openpbr_lobe_may_have_value(lobe, OpenPBR_DiffuseLobeIndex) || openpbr_lobe_is_sampled(lobe, OpenPBR_DiffuseLobeIndex)))
         {
             openpbr_calculate_lobe_value_and_pdf(lobe.diffuse_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
             bsdf_cos = openpbr_add_diffuse_specular(bsdf_cos, lobe_value);
             pdf += lobe.lobe_weights[OpenPBR_DiffuseLobeIndex] * lobe_pdf;
         }
-        if (selected_lobe_index != OpenPBR_ThinWallSpecularTransLobeIndex)
+        if (selected_lobe_index != OpenPBR_ThinWallSpecularTransLobeIndex && (openpbr_lobe_may_have_value(lobe, OpenPBR_ThinWallSpecularTransLobeIndex) || openpbr_lobe_is_sampled(lobe, OpenPBR_ThinWallSpecularTransLobeIndex)))
         {
             openpbr_calculate_lobe_value_and_pdf(lobe.thin_wall_specular_trans_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
             bsdf_cos = openpbr_add_diffuse_specular(bsdf_cos, lobe_value);
             pdf += lobe.lobe_weights[OpenPBR_ThinWallSpecularTransLobeIndex] * lobe_pdf;
         }
-        if (selected_lobe_index != OpenPBR_ThinWallDiffuseTransLobeIndex)
+        if (selected_lobe_index != OpenPBR_ThinWallDiffuseTransLobeIndex && (openpbr_lobe_may_have_value(lobe, OpenPBR_ThinWallDiffuseTransLobeIndex) || openpbr_lobe_is_sampled(lobe, OpenPBR_ThinWallDiffuseTransLobeIndex)))
         {
             openpbr_calculate_lobe_value_and_pdf(lobe.thin_wall_diffuse_trans_lobe, view_direction, light_direction, lobe_value, lobe_pdf);
             bsdf_cos = openpbr_add_diffuse_specular(bsdf_cos, lobe_value);
@@ -399,7 +458,7 @@ bool openpbr_sample_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_
         // NOTE: The sampled_type is intentionally not updated here -- it represents
         // the type of lobe that directly generated the sample.
     }
-    else
+    else if (bool(sampled_type & OpenPBR_BsdfLobeTypeSpecular))
     {
         // If a delta lobe is sampled, don't attempt to combine its weight with the other lobes
         // (theoretically multiple delta lobes could be combined but we're not doing that).

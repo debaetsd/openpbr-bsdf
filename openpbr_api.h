@@ -51,6 +51,28 @@ OPENPBR_INLINE_FUNCTION void openpbr_sample(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR
     openpbr_sample_impl(prepared, rand, light_direction, weight, pdf, sampled_type);
 }
 
+// openpbr_sample for an integrator that evaluates the sampled direction itself - as
+// one doing MIS does anyway, with openpbr_eval_and_pdf. The direction and lobe type are
+// openpbr_sample's (same random numbers, same direction); for a delta sample
+// (sampled_type has OpenPBR_BsdfLobeTypeSpecular) delta_weight and delta_pdf are its
+// weight and pdf; for any other sample they are not meaningful and the caller's own
+// evaluation gives weight = value / pdf. delta_pdf == 0 means no valid sample; a
+// positive delta_pdf on a non-delta sample does not guarantee one either - the
+// caller's evaluation can still return a zero pdf in that direction, and the
+// sample is then invalid.
+// With OPENPBR_SAMPLE_REEVALUATE = 1 this is the cheap path: openpbr_sample is this
+// plus one openpbr_eval_and_pdf, and an integrator that already has one avoids the
+// second copy.
+OPENPBR_INLINE_FUNCTION void openpbr_sample_direction(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_PreparedBsdf) prepared,
+                                                      const vec3 rand,
+                                                      OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(vec3) light_direction,
+                                                      OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_DiffuseSpecular) delta_weight,
+                                                      OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) delta_pdf,
+                                                      OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_BsdfLobeType) sampled_type)
+{
+    openpbr_sample_direction_impl(prepared, rand, light_direction, delta_weight, delta_pdf, sampled_type);
+}
+
 // openpbr_eval and openpbr_pdf for the same light direction, in one evaluation -
 // what light sampling with MIS needs (the BSDF's value toward the light, and the
 // pdf BSDF sampling would have had of producing that direction). The results
