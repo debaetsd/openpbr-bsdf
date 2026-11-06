@@ -83,6 +83,26 @@ struct OpenPBR_AggregateLobe
 #endif  // OPENPBR_LANGUAGE_TARGET_HLSL
 };
 
+// One step of openpbr_select_lobe's walk over the lobes: selects `lobe_index` if
+// `rand` falls in its slice of the weights, remapping `rand` into the slice;
+// otherwise moves past the slice.
+bool openpbr_try_select_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_AggregateLobe) lobe,
+                             const int lobe_index,
+                             OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_INOUT(float) rand,
+                             OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_INOUT(float) weight_so_far,
+                             OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) selected_lobe_weight)
+{
+    selected_lobe_weight = lobe.lobe_weights[lobe_index];
+    if (rand < weight_so_far + selected_lobe_weight)
+    {
+        rand = (rand - weight_so_far) / selected_lobe_weight;
+        openpbr_clamp_remapped_random_number(rand);
+        return true;
+    }
+    weight_so_far += selected_lobe_weight;
+    return false;
+}
+
 int openpbr_select_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_AggregateLobe) lobe,
                         OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_INOUT(float) rand,
                         OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) selected_lobe_weight,
@@ -116,24 +136,22 @@ int openpbr_select_lobe(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONST_REF(OpenPBR_A
 
     float weight_so_far = 0.0f;
 
-    // Loop through all but the last lobe index.
-    OPENPBR_UNROLL
-    for (int lobe_index = 0; lobe_index < OpenPBR_NumBaseLobes - 1; ++lobe_index)
-    {
-        // Skip any lobes that are disabled by specialization constants.
-        if ((!OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency) && lobe_index == OpenPBR_DielectricMMSLobeIndex) ||
-            (!OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableMetallic) && lobe_index == OpenPBR_MetalMMSLobeIndex))
-            continue;
-
-        selected_lobe_weight = lobe.lobe_weights[lobe_index];
-        if (rand < weight_so_far + selected_lobe_weight)
-        {
-            rand = (rand - weight_so_far) / selected_lobe_weight;
-            openpbr_clamp_remapped_random_number(rand);
-            return lobe_index;
-        }
-        weight_so_far += selected_lobe_weight;
-    }
+    // All but the last lobe, in index order, skipping any lobes that are disabled by
+    // specialization constants. Written out rather than looped over the indices: a
+    // loop skipping a disabled lobe was left rolled by DXC despite OPENPBR_UNROLL,
+    // and a rolled loop indexing lobe_weights puts the array in local memory.
+    if (openpbr_try_select_lobe(lobe, OpenPBR_SpecularLobeIndex, rand, weight_so_far, selected_lobe_weight))
+        return OpenPBR_SpecularLobeIndex;
+    if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency) &&
+        openpbr_try_select_lobe(lobe, OpenPBR_DielectricMMSLobeIndex, rand, weight_so_far, selected_lobe_weight))
+        return OpenPBR_DielectricMMSLobeIndex;
+    if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableMetallic) &&
+        openpbr_try_select_lobe(lobe, OpenPBR_MetalMMSLobeIndex, rand, weight_so_far, selected_lobe_weight))
+        return OpenPBR_MetalMMSLobeIndex;
+    if (openpbr_try_select_lobe(lobe, OpenPBR_DiffuseLobeIndex, rand, weight_so_far, selected_lobe_weight))
+        return OpenPBR_DiffuseLobeIndex;
+    if (openpbr_try_select_lobe(lobe, OpenPBR_ThinWallSpecularTransLobeIndex, rand, weight_so_far, selected_lobe_weight))
+        return OpenPBR_ThinWallSpecularTransLobeIndex;
 
     OPENPBR_CONSTEXPR_LOCAL int OpenPBR_LastLobeIndex = OpenPBR_NumBaseLobes - 1;
     // The very last lobe is currently the thin-wall diffuse-transmission lobe.
@@ -472,18 +490,19 @@ float openpbr_estimate_lobe_contribution(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CO
                                          const vec3 view_direction,
                                          const vec3 path_throughput)
 {
+    // Written out rather than looped over the lobe indices, in index order (so the
+    // sum is the loop's, bit for bit): a loop skipping a lobe disabled by a
+    // specialization constant was left rolled by DXC despite OPENPBR_UNROLL, and a
+    // rolled loop indexing lobe_weights puts the array in local memory.
     float result = 0.0f;
-
-    OPENPBR_UNROLL
-    for (int lobe_index = 0; lobe_index < OpenPBR_NumBaseLobes; ++lobe_index)
-    {
-        if ((!OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency) && lobe_index == OpenPBR_DielectricMMSLobeIndex) ||
-            (!OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableMetallic) && lobe_index == OpenPBR_MetalMMSLobeIndex))
-            continue;
-
-        result += lobe.lobe_weights[lobe_index];
-    }
-
+    result += lobe.lobe_weights[OpenPBR_SpecularLobeIndex];
+    if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency))
+        result += lobe.lobe_weights[OpenPBR_DielectricMMSLobeIndex];
+    if (OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableMetallic))
+        result += lobe.lobe_weights[OpenPBR_MetalMMSLobeIndex];
+    result += lobe.lobe_weights[OpenPBR_DiffuseLobeIndex];
+    result += lobe.lobe_weights[OpenPBR_ThinWallSpecularTransLobeIndex];
+    result += lobe.lobe_weights[OpenPBR_ThinWallDiffuseTransLobeIndex];
     return result;
 }
 
