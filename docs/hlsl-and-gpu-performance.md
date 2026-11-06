@@ -40,6 +40,7 @@ combinations.
 | coat layer reaches its base from one call site (value, pdf, sampling) | removes duplicate copies of the base aggregate |
 | specular lobe: one coefficient evaluation for value and pdf, reflection + all refraction half vectors in one loop | thin film/Fresnel once per lobe copy |
 | dispersion compiled in, equal channel IORs: transmission loop runs once and broadcasts | 3x less transmission work for non-dispersive materials |
+| lobe-weight sum and lobe selection written out instead of looped over lobe indices | with a lobe disabled by a specialization constant DXC left both loops rolled despite `[unroll]`, putting `lobe_weights` in local memory |
 
 Path tracer DXR library, ray generation shader:
 
@@ -50,6 +51,11 @@ Path tracer DXR library, ray generation shader:
 
 Inlined copies: thin film 39 -> 7, aggregate sampling 21 -> 12, lobe value/pdf
 ~70 -> 23. Cold pipeline compile 132 s -> 11 s.
+
+With translucency compiled out (`EnableTranslucency` false, as a raster
+shader or an opaque-only ray generation shader uses it), the written-out lobe
+loops take that shader from 133 KB to 126 KB of DXIL and remove its last
+OpenPBR `alloca`.
 
 ## Opt-in options (`openpbr_settings.h`, default 0)
 
