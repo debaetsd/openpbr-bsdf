@@ -114,6 +114,53 @@
 
 // Hooks added after a custom interop layer may have been written: give them a
 // neutral default here so such a layer keeps compiling without defining them.
+// OPENPBR_STRUCT_CTOR_N declares HLSL's per-struct constructor and is empty on
+// every other backend; non-variadic, as the GLSL preprocessor requires.
+#ifndef OPENPBR_STRUCT_CTOR_1
+#define OPENPBR_STRUCT_CTOR_1(type, t1, n1)
+#endif
+#ifndef OPENPBR_STRUCT_CTOR_2
+#define OPENPBR_STRUCT_CTOR_2(type, t1, n1, t2, n2)
+#endif
+#ifndef OPENPBR_STRUCT_CTOR_3
+#define OPENPBR_STRUCT_CTOR_3(type, t1, n1, t2, n2, t3, n3)
+#endif
+#ifndef OPENPBR_STRUCT_CTOR_4
+#define OPENPBR_STRUCT_CTOR_4(type, t1, n1, t2, n2, t3, n3, t4, n4)
+#endif
+#ifndef OPENPBR_STRUCT_CTOR_5
+#define OPENPBR_STRUCT_CTOR_5(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5)
+#endif
+#ifndef OPENPBR_STRUCT_CTOR_6
+#define OPENPBR_STRUCT_CTOR_6(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6)
+#endif
+#ifndef OPENPBR_STRUCT_CTOR_7
+#define OPENPBR_STRUCT_CTOR_7(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7)
+#endif
+#ifndef OPENPBR_STRUCT_CTOR_8
+#define OPENPBR_STRUCT_CTOR_8(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7, t8, n8)
+#endif
+#ifndef OPENPBR_STRUCT_CTOR_9
+#define OPENPBR_STRUCT_CTOR_9(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7, t8, n8, t9, n9)
+#endif
+#ifndef OPENPBR_STRUCT_CTOR_10
+#define OPENPBR_STRUCT_CTOR_10(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7, t8, n8, t9, n9, t10, n10)
+#endif
+#ifndef OPENPBR_STRUCT_CTOR_11
+#define OPENPBR_STRUCT_CTOR_11(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7, t8, n8, t9, n9, t10, n10, t11, n11)
+#endif
+#ifndef OPENPBR_STRUCT_CTOR_12
+#define OPENPBR_STRUCT_CTOR_12(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7, t8, n8, t9, n9, t10, n10, t11, n11, t12, n12)
+#endif
+#ifndef OPENPBR_STRUCT_CTOR_13
+#define OPENPBR_STRUCT_CTOR_13(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7, t8, n8, t9, n9, t10, n10, t11, n11, t12, n12, t13, n13)
+#endif
+#ifndef OPENPBR_STRUCT_CTOR_14
+#define OPENPBR_STRUCT_CTOR_14(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7, t8, n8, t9, n9, t10, n10, t11, n11, t12, n12, t13, n13, t14, n14)
+#endif
+#ifndef OPENPBR_STRUCT_CTOR_15
+#define OPENPBR_STRUCT_CTOR_15(type, t1, n1, t2, n2, t3, n3, t4, n4, t5, n5, t6, n6, t7, n7, t8, n8, t9, n9, t10, n10, t11, n11, t12, n12, t13, n13, t14, n14, t15, n15)
+#endif
 #ifndef OPENPBR_UNROLL
 #define OPENPBR_UNROLL
 #endif

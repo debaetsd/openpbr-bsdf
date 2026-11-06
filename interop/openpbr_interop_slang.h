@@ -60,13 +60,17 @@
 // Loop unroll hint, placed before a loop with a small constant trip count (the
 // per-channel and per-lobe loops). Slang's [unroll] attribute, as in HLSL.
 // Predefine OPENPBR_UNROLL to override.
-#ifndef OPENPBR_DONT_UNROLL
-// The opposite hint, for a per-channel loop whose body is large: unrolled it
-// would be three copies of that body. Slang's [loop], as in HLSL.
-#define OPENPBR_DONT_UNROLL [loop]
-#endif
 #ifndef OPENPBR_UNROLL
 #define OPENPBR_UNROLL [unroll]
+#endif
+
+// The opposite hint, for a per-channel loop whose body is large: unrolled it
+// would be three copies of that body. Slang's [loop], as in HLSL.
+// [loop] also keeps the compiler from unrolling such a loop when its trip count
+// is 1 at runtime, which costs nothing.
+// Predefine OPENPBR_DONT_UNROLL to override.
+#ifndef OPENPBR_DONT_UNROLL
+#define OPENPBR_DONT_UNROLL [loop]
 #endif
 
 // Math type aliases to match GLSL naming conventions.
@@ -119,7 +123,7 @@ typedef float4 vec4;
 #define OPENPBR_SWIZZLE(v, suffix) (v).suffix
 
 // Struct constructor declaration.
-// GLSL generates a constructor for custom struct types so empty macros
+// Slang synthesizes constructors for struct types, so these are empty macros.
 // clang-format off
 #define OPENPBR_STRUCT_CTOR_1(type, t1, n1)
 #define OPENPBR_STRUCT_CTOR_2(type, t1, n1, t2, n2)

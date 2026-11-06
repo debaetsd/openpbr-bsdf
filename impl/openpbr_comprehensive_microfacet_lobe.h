@@ -294,6 +294,14 @@ void openpbr_calculate_lobe_value_and_pdf(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_C
                                           OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(OpenPBR_DiffuseSpecular) value,
                                           OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_OUT(float) pdf)
 {
+#ifdef ECLAIR_RASTERIZER
+    // openpbr_reflection_coefficient desaturates the thin film's reflectance in this
+    // build and openpbr_all_coefficients does not, so the shared evaluation below
+    // would not reproduce the value: evaluate the two separately.
+    value = openpbr_calculate_lobe_value(lobe, view_direction, light_direction);
+    pdf = openpbr_calculate_lobe_pdf(lobe, view_direction, light_direction);
+    return;
+#endif
     const float idotn = dot(lobe.normal_ff, view_direction);
     const float odotn = dot(lobe.normal_ff, light_direction);
 

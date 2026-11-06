@@ -276,7 +276,7 @@ OPENPBR_INLINE_FUNCTION void openpbr_sample_event_distance(OPENPBR_ADDRESS_SPACE
 
     // Make sure the extinction of the sampled color channel is greater than zero;
     // otherwise, the sampled distance is infinity and the distance argument is left as is.
-    const float extinction_of_sampled_color_channel = openpbr_component(volume.extinction_coefficient, sampled_color_channel);  // not [i]: see openpbr_component
+    const float extinction_of_sampled_color_channel = openpbr_component(volume.extinction_coefficient, sampled_color_channel);  // not v[i]: see openpbr_component (-1 would read .z, not out of bounds)
     if (extinction_of_sampled_color_channel > 0.0f)
     {
         // Perfectly sample an event distance for the selected color channel.

@@ -102,13 +102,17 @@
 // on its own, and an array or vector indexed by a loop counter it leaves rolled
 // stays a dynamically indexed alloca - local memory on most GPUs.
 // Predefine OPENPBR_UNROLL to override.
-#ifndef OPENPBR_DONT_UNROLL
-// The opposite hint, for a per-channel loop whose body is large: unrolled it
-// would be three copies of that body. DXC's [loop].
-#define OPENPBR_DONT_UNROLL [loop]
-#endif
 #ifndef OPENPBR_UNROLL
 #define OPENPBR_UNROLL [unroll]
+#endif
+
+// The opposite hint, for a per-channel loop whose body is large: unrolled it
+// would be three copies of that body. DXC's [loop].
+// [loop] also keeps the compiler from unrolling such a loop when its trip count
+// is 1 at runtime, which costs nothing.
+// Predefine OPENPBR_DONT_UNROLL to override.
+#ifndef OPENPBR_DONT_UNROLL
+#define OPENPBR_DONT_UNROLL [loop]
 #endif
 
 // ---------------------------------------------------------------------------
@@ -120,9 +124,9 @@
 // The selector in openpbr_interop.h reaches this header by either route: an
 // explicit OPENPBR_LANGUAGE_TARGET_HLSL = 1, or auto-detection from
 // __hlsl_dx_compiler - and in the auto-detected case the flag is still 0. The
-// per-struct ctor() members are guarded on this flag, so leaving it 0 would
-// silently omit them and every OPENPBR_MAKE_STRUCT_N call site would fail to
-// resolve. Setting it here also lets renderer code test
+// hand-written ctor() of OpenPBR_AggregateLobe (the one struct with an array
+// member) is guarded on this flag, so leaving it 0 would silently omit it and its
+// OPENPBR_MAKE_STRUCT_N call site would fail to resolve. Setting it here also lets renderer code test
 // OPENPBR_LANGUAGE_TARGET_HLSL and get a truthful answer.
 //
 // This runs after the selector has finished validating the flags, so
@@ -294,8 +298,9 @@ typedef float4 vec4;
 // macros cannot expand to `type(args...)`.
 //
 // Instead every OpenPBR struct built this way declares a static member function
-// named ctor(), guarded by OPENPBR_LANGUAGE_TARGET_HLSL, and the macros call
-// it. Naming the member rather than pasting a free function name keeps `type`
+// named ctor() - through OPENPBR_STRUCT_CTOR_N, or by hand under
+// OPENPBR_LANGUAGE_TARGET_HLSL for the one struct with an array member - and the
+// macros call it. Naming the member rather than pasting a free function name keeps `type`
 // an ordinary macro argument, so the generic lobe headers can keep passing
 // OPENPBR_MINIMAL_MICROFACET_LOBE_TYPE and have it expand normally.
 //

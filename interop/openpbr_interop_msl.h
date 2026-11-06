@@ -68,13 +68,15 @@
 // per-channel and per-lobe loops). Empty: MSL documents no unroll attribute; the Metal
 // compiler unrolls constant-trip-count loops itself.
 // Predefine OPENPBR_UNROLL to override.
-#ifndef OPENPBR_DONT_UNROLL
-// The opposite hint, for a per-channel loop whose body is large: unrolled it
-// would be three copies of that body. Empty, like OPENPBR_UNROLL.
-#define OPENPBR_DONT_UNROLL
-#endif
 #ifndef OPENPBR_UNROLL
 #define OPENPBR_UNROLL
+#endif
+
+// The opposite hint, for a per-channel loop whose body is large: unrolled it
+// would be three copies of that body. Empty, like OPENPBR_UNROLL.
+// Predefine OPENPBR_DONT_UNROLL to override.
+#ifndef OPENPBR_DONT_UNROLL
+#define OPENPBR_DONT_UNROLL
 #endif
 
 // Math type aliases to match GLSL naming conventions.
@@ -116,7 +118,8 @@ template <typename T, int N> vec<bool, N> greaterThanEqual(const vec<T, N> a, co
 #define OPENPBR_SWIZZLE(v, suffix) (v).suffix
 
 // Struct constructor declaration.
-// MSL uses braced aggregate initialization empty macros
+// MSL uses braced aggregate initialization, which a declared constructor would
+// break, so these are empty macros.
 // clang-format off
 #define OPENPBR_STRUCT_CTOR_1(type, t1, n1)
 #define OPENPBR_STRUCT_CTOR_2(type, t1, n1, t2, n2)

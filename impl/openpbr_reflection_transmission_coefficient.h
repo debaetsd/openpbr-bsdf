@@ -342,6 +342,9 @@ float openpbr_transmission_probability(OPENPBR_ADDRESS_SPACE_THREAD OPENPBR_CONS
                                        const vec3 path_throughput,
                                        const float idoth)
 {
+    if (!OPENPBR_GET_SPECIALIZATION_CONSTANT(EnableTranslucency))
+        return 0.0f;
+
     return openpbr_transmission_probability_from_coefficients(openpbr_all_coefficients(refl_trans_coeff, idoth), path_throughput);
 }
 

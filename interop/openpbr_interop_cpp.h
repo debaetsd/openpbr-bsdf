@@ -89,13 +89,15 @@
 // per-channel and per-lobe loops). Empty: there is no portable C++ spelling, and optimizing
 // compilers unroll these loops on their own.
 // Predefine OPENPBR_UNROLL to override.
-#ifndef OPENPBR_DONT_UNROLL
-// The opposite hint, for a per-channel loop whose body is large: unrolled it
-// would be three copies of that body. Empty, like OPENPBR_UNROLL.
-#define OPENPBR_DONT_UNROLL
-#endif
 #ifndef OPENPBR_UNROLL
 #define OPENPBR_UNROLL
+#endif
+
+// The opposite hint, for a per-channel loop whose body is large: unrolled it
+// would be three copies of that body. Empty, like OPENPBR_UNROLL.
+// Predefine OPENPBR_DONT_UNROLL to override.
+#ifndef OPENPBR_DONT_UNROLL
+#define OPENPBR_DONT_UNROLL
 #endif
 
 // Math type aliases to match GLSL naming conventions.
@@ -186,7 +188,8 @@ OPENPBR_INLINE_FUNCTION vec3 openpbr_swizzle_xyz(const vec4 v)
 #define OPENPBR_SWIZZLE(v, suffix) openpbr_swizzle_##suffix(v)
 
 // Struct constructor declaration.
-// C++ uses braced aggregate initialization empty macros
+// C++ uses braced aggregate initialization, which a declared constructor would
+// break, so these are empty macros.
 // clang-format off
 #define OPENPBR_STRUCT_CTOR_1(type, t1, n1)
 #define OPENPBR_STRUCT_CTOR_2(type, t1, n1, t2, n2)

@@ -57,13 +57,15 @@
 // per-channel and per-lobe loops). Empty: [[unroll]] needs GL_EXT_control_flow_attributes,
 // which a host enables itself (and may then predefine this to [[unroll]]).
 // Predefine OPENPBR_UNROLL to override.
-#ifndef OPENPBR_DONT_UNROLL
-// The opposite hint, for a per-channel loop whose body is large: unrolled it
-// would be three copies of that body. Empty ([[dont_unroll]] needs GL_EXT_control_flow_attributes).
-#define OPENPBR_DONT_UNROLL
-#endif
 #ifndef OPENPBR_UNROLL
 #define OPENPBR_UNROLL
+#endif
+
+// The opposite hint, for a per-channel loop whose body is large: unrolled it
+// would be three copies of that body. Empty ([[dont_unroll]] needs GL_EXT_control_flow_attributes).
+// Predefine OPENPBR_DONT_UNROLL to override.
+#ifndef OPENPBR_DONT_UNROLL
+#define OPENPBR_DONT_UNROLL
 #endif
 
 // Math type aliases.

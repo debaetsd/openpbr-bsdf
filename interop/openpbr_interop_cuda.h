@@ -75,13 +75,15 @@
 // per-channel and per-lobe loops). nvcc's #pragma unroll, as an operator so it can come from
 // a macro.
 // Predefine OPENPBR_UNROLL to override.
-#ifndef OPENPBR_DONT_UNROLL
-// The opposite hint, for a per-channel loop whose body is large: unrolled it
-// would be three copies of that body. nvcc's "#pragma unroll 1".
-#define OPENPBR_DONT_UNROLL _Pragma("unroll 1")
-#endif
 #ifndef OPENPBR_UNROLL
 #define OPENPBR_UNROLL _Pragma("unroll")
+#endif
+
+// The opposite hint, for a per-channel loop whose body is large: unrolled it
+// would be three copies of that body. nvcc's "#pragma unroll 1".
+// Predefine OPENPBR_DONT_UNROLL to override.
+#ifndef OPENPBR_DONT_UNROLL
+#define OPENPBR_DONT_UNROLL _Pragma("unroll 1")
 #endif
 
 // Math type aliases to match GLSL naming conventions.
@@ -163,7 +165,8 @@ OPENPBR_INLINE_FUNCTION vec3 openpbr_swizzle_xyz(const vec4 v)
 #define OPENPBR_SWIZZLE(v, suffix) openpbr_swizzle_##suffix(v)
 
 // Struct constructor declaration.
-// Cuda uses braced aggregate initialization empty macros
+// CUDA uses braced aggregate initialization, which a declared constructor would
+// break, so these are empty macros.
 // clang-format off
 #define OPENPBR_STRUCT_CTOR_1(type, t1, n1)
 #define OPENPBR_STRUCT_CTOR_2(type, t1, n1, t2, n2)
